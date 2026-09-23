@@ -1,0 +1,472 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>POP 현장단말 · SH-MES</title>
+<link rel="stylesheet" href="../assets/css/app.css">
+<style>
+  /* 현장 단말은 장갑 낀 손으로 누른다. 버튼 최소 44px. (WI-06 결정사항) */
+  .pop { display: grid; grid-template-columns: 300px 1fr 300px; gap: 12px; align-items: start; }
+  @media (max-width: 1320px) { .pop { grid-template-columns: 280px 1fr; } .pop .col3 { grid-column: 1 / -1; } }
+
+  .step { border-bottom: 1px solid var(--line); padding: 12px 13px; }
+  .step:last-child { border-bottom: none; }
+  .step .sh { display: flex; align-items: center; gap: 8px; margin-bottom: 9px; }
+  .step .sn {
+    width: 20px; height: 20px; border-radius: 50%; background: #2a3442; color: #9aa7b8;
+    display: grid; place-items: center; font-size: 11px; font-weight: 700; flex: 0 0 auto;
+  }
+  .step.ok .sn { background: var(--ok); color: #06240f; }
+  .step .sh b { font-size: 12.5px; }
+  .step .sh .badge { margin-left: auto; font-size: 10.5px; }
+
+  .scan { display: flex; gap: 6px; margin-bottom: 9px; }
+  .scan input { flex: 1; font-family: var(--mono); }
+
+  .matlist { font-size: 11.5px; }
+  .matlist .m {
+    display: flex; align-items: center; gap: 8px; padding: 6px 8px;
+    border: 1px solid var(--line); border-radius: 3px; margin-bottom: 5px; background: #0f151d;
+  }
+  .matlist .m.done { border-color: rgba(70,196,107,.45); background: rgba(70,196,107,.07); }
+  .matlist .m.ng { border-color: rgba(229,84,75,.5); background: rgba(229,84,75,.08); }
+  .matlist .m .mk { width: 15px; text-align: center; }
+  .matlist .m .nm { flex: 1; }
+  .matlist .m .lot { font-family: var(--mono); font-size: 10.5px; color: #8ec9c7; }
+
+  .chk { font-size: 12px; }
+  .chk label {
+    display: flex; align-items: center; gap: 9px; padding: 8px 9px; cursor: pointer;
+    border: 1px solid var(--line); border-radius: 3px; margin-bottom: 5px; background: #0f151d;
+  }
+  .chk label:hover { border-color: var(--accent-dim); }
+  .chk input { width: 16px; height: 16px; accent-color: #00a9a5; }
+  .chk label.on { border-color: rgba(70,196,107,.45); color: #9fe0b2; }
+
+  .bigbtn {
+    display: block; width: 100%; min-height: 56px; font-size: 17px; font-weight: 700;
+    border-radius: 4px; border: 1px solid var(--line); background: var(--panel-2);
+    color: var(--txt); cursor: pointer; font-family: inherit; margin-bottom: 8px;
+  }
+  .bigbtn:disabled { opacity: .35; cursor: not-allowed; }
+  .bigbtn.start { background: rgba(70,196,107,.16); border-color: var(--ok); color: #9fe0b2; }
+  .bigbtn.start:not(:disabled):hover { background: var(--ok); color: #06240f; }
+  .bigbtn.stop { background: rgba(229,84,75,.16); border-color: var(--bad); color: #f2938c; }
+  .bigbtn.pause { background: rgba(224,168,58,.14); border-color: var(--warn); color: #eabf62; }
+  .btn-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+
+  .timer {
+    font-family: var(--mono); font-size: 34px; text-align: center; letter-spacing: 1px;
+    padding: 10px 0 4px; color: #e6ecf3;
+  }
+  .timer.run { color: #6bd98c; }
+  .timer-lbl { text-align: center; font-size: 11px; color: var(--txt-dim); margin-bottom: 10px; }
+
+  .qty { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px; }
+  .qty .q { background: #0f151d; border: 1px solid var(--line); border-radius: 3px; padding: 9px 11px; }
+  .qty .q .l { font-size: 11px; color: var(--txt-dim); }
+  .qty .q .v { font-size: 26px; font-family: var(--mono); font-weight: 700; }
+  .qty .q.good .v { color: #6bd98c; }
+  .qty .q.bad .v { color: #f0786f; }
+
+  .keypad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; }
+  .keypad button {
+    min-height: 40px; font-size: 16px; background: var(--panel-2); border: 1px solid var(--line);
+    color: var(--txt); border-radius: 3px; cursor: pointer; font-family: var(--mono);
+  }
+  .keypad button:hover { border-color: var(--accent-dim); }
+
+  .life { font-size: 11.5px; margin-bottom: 9px; }
+  .life .t { display: flex; justify-content: space-between; margin-bottom: 3px; }
+  .life .t span:last-child { font-family: var(--mono); }
+
+  .doc { font-size: 11.5px; }
+  .doc a {
+    display: flex; justify-content: space-between; padding: 7px 9px; border: 1px solid var(--line);
+    border-radius: 3px; margin-bottom: 5px; background: #0f151d; cursor: pointer;
+  }
+  .doc a:hover { border-color: var(--accent-dim); }
+  .doc a .rev { color: var(--txt-dim); font-family: var(--mono); font-size: 10.5px; }
+</style>
+</head>
+<body data-page="pop" data-title="POP 현장단말" data-crumb="M-04 / 현장 운영">
+
+<div class="filters">
+  <label>설비</label>
+  <select id="f-eq"></select>
+  <label>작업지시</label>
+  <select id="f-wo"></select>
+  <label>작업자</label>
+  <select id="f-op"></select>
+  <div style="flex:1"></div>
+  <span class="dim" style="font-size:11px">터치 단말 기준 화면입니다 · 바코드 스캐너는 입력창 포커스 상태에서 자동 입력됩니다</span>
+</div>
+
+<div class="pop">
+
+  <!-- ============ 좌측 : 지시 정보 + 자재 ============ -->
+  <div>
+    <div class="card" style="margin-bottom:12px">
+      <header><h2>작업지시 정보</h2></header>
+      <div class="body tight">
+        <table class="tb" id="tb-wo"></table>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="step" id="st1">
+        <div class="sh"><span class="sn">1</span><b>투입자재 확인</b>
+          <span class="badge st st-idle" id="b1">0 / 4</span></div>
+        <div class="scan">
+          <input type="text" id="scan-lot" placeholder="자재 LOT 스캔">
+          <button class="btn" id="btn-scan">확인</button>
+        </div>
+        <div class="matlist" id="mats"></div>
+        <div class="note" id="scan-msg">지시서에 등록된 자재 LOT 만 인식됩니다. 다른 LOT 스캔 시 진행이 차단됩니다.</div>
+      </div>
+
+      <div class="step" id="st2">
+        <div class="sh"><span class="sn">2</span><b>셋업 체크리스트</b>
+          <span class="badge st st-idle" id="b2">0 / 5</span></div>
+        <div class="chk" id="chks"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ 중앙 : 작업 제어 + 실적 ============ -->
+  <div>
+    <div class="card" style="margin-bottom:12px">
+      <header><h2>작업 제어</h2><span class="sub" id="ctrl-sub">대기 중</span>
+        <div class="spacer"></div><span class="st st-idle" id="run-st">대기</span></header>
+      <div class="body">
+        <div class="timer" id="timer">00:00:00</div>
+        <div class="timer-lbl" id="timer-lbl">작업 시작 전 — 1·2단계를 완료하세요</div>
+
+        <button class="bigbtn start" id="btn-start" disabled>작 업 시 작</button>
+        <div class="btn-row">
+          <button class="bigbtn pause" id="btn-pause" disabled>일시정지</button>
+          <button class="bigbtn stop" id="btn-end" disabled>작업종료</button>
+        </div>
+
+        <div id="down-wrap" style="display:none;margin-top:10px">
+          <div class="dim" style="font-size:11px;margin-bottom:5px">비가동 사유 선택 (6대 로스 분류)</div>
+          <select id="down-code" style="width:100%"></select>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="step" id="st3">
+        <div class="sh"><span class="sn">3</span><b>실적 등록</b>
+          <span class="badge dim" style="font-size:10.5px" id="b3">누적 0 EA</span></div>
+
+        <div class="qty">
+          <div class="q good"><div class="l">양품 수량</div><div class="v" id="q-good">0</div></div>
+          <div class="q bad"><div class="l">불량 수량</div><div class="v" id="q-bad">0</div></div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <div>
+            <div class="dim" style="font-size:11px;margin-bottom:5px">수량 입력</div>
+            <input type="text" id="inp-qty" value="" placeholder="0" style="width:100%;text-align:right;font-family:var(--mono);font-size:18px;margin-bottom:6px">
+            <div class="keypad" id="kp"></div>
+          </div>
+          <div>
+            <div class="dim" style="font-size:11px;margin-bottom:5px">불량 유형</div>
+            <select id="sel-def" style="width:100%;margin-bottom:8px"></select>
+            <button class="bigbtn" id="btn-good" style="min-height:48px">양품 등록</button>
+            <button class="bigbtn" id="btn-bad" style="min-height:48px">불량 등록</button>
+            <div class="note" id="reg-msg">등록 시 ERP 생산실적으로 전송됩니다.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ 우측 : 공구수명 / 문서 / 4M ============ -->
+  <div class="col3">
+    <div class="card" style="margin-bottom:12px">
+      <header><h2>공구 · 금형 수명</h2></header>
+      <div class="body" id="life"></div>
+    </div>
+
+    <div class="card" style="margin-bottom:12px">
+      <header><h2>작업표준서</h2><span class="sub">최신 개정본</span></header>
+      <div class="body doc" id="docs"></div>
+    </div>
+
+    <div class="card">
+      <header><h2>4M 변경점 등록</h2><span class="sub">IATF 16949</span></header>
+      <div class="body">
+        <select id="m4-type" style="width:100%;margin-bottom:6px">
+          <option>Man — 작업자 변경</option>
+          <option>Machine — 설비/금형 변경</option>
+          <option>Material — 자재/LOT 변경</option>
+          <option>Method — 작업조건 변경</option>
+        </select>
+        <textarea id="m4-txt" rows="3" style="width:100%;resize:vertical" placeholder="변경 내용을 입력하세요"></textarea>
+        <button class="btn pri" id="btn-m4" style="width:100%;margin-top:6px">변경점 등록</button>
+        <div class="note">4M 변경 시 초물검사가 자동 요청되며, 품질보증팀에 알림이 발송됩니다.</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="../assets/js/auth.js"></script>
+<script src="../assets/js/mock.js"></script>
+<script src="../assets/js/chart.js"></script>
+<script src="../assets/js/shell.js"></script>
+<script>
+(function () {
+  var user = Auth.current() || { name: '박성진' };
+
+  // ------- 셀렉트 채우기 -------
+  var fEq = document.getElementById('f-eq'), fWo = document.getElementById('f-wo'), fOp = document.getElementById('f-op');
+  Mock.LINES.forEach(function (l) { fEq.add(new Option(l.code + '  ' + l.name, l.code)); });
+  fEq.value = 'CT-01';
+  var wos = Mock.workOrders().filter(function (w) { return w.status === '진행' || w.status === '투입' || w.status === '확정'; });
+  wos.slice(0, 8).forEach(function (w) { fWo.add(new Option(w.no + '  ' + w.item, w.no)); });
+  Mock.WORKERS.forEach(function (w) { fOp.add(new Option(w, w)); });
+  fOp.value = user.name && Mock.WORKERS.indexOf(user.name) > -1 ? user.name : '박성진';
+
+  var WO = wos[0];
+
+  function drawWo() {
+    document.getElementById('tb-wo').innerHTML =
+      [['작업지시', '<span class="lot">' + WO.no + '</span>'],
+       ['품번 / 품명', WO.item + '<br><span class="dim">' + WO.itemName + '</span>'],
+       ['지시수량', '<b>' + WO.qty.toLocaleString() + '</b> ' + WO.unit],
+       ['생산 LOT', '<span class="lot">' + WO.lot + '</span>'],
+       ['공정경로', WO.route.join(' ▸ ')],
+       ['납기', WO.due]
+      ].map(function (r) {
+        return '<tr><td class="dim" style="width:82px">' + r[0] + '</td><td>' + r[1] + '</td></tr>';
+      }).join('');
+  }
+  drawWo();
+
+  fWo.onchange = function () {
+    WO = wos.filter(function (w) { return w.no === fWo.value; })[0] || WO;
+    drawWo();
+  };
+
+  // ------- ① 투입자재 -------
+  var MATS = [
+    { mat: 'BD-2200', name: '바인더 수지', lot: 'L26-0817', qty: '336 kg', ok: false },
+    { mat: 'SV-0110', name: '용제(NMP)',   lot: 'L26-0902', qty: '400 kg', ok: false },
+    { mat: 'CB-0450', name: '도전재',      lot: 'L26-0811', qty: '48 kg',  ok: false },
+    { mat: 'RS-0050', name: '이형 원단',   lot: 'L26-0828', qty: '3,400 EA', ok: false }
+  ];
+
+  function drawMats(ngLot) {
+    document.getElementById('mats').innerHTML = MATS.map(function (m) {
+      var cls = m.ok ? 'done' : (ngLot && ngLot === m.__ng ? 'ng' : '');
+      return '<div class="m ' + cls + '"><span class="mk">' + (m.ok ? '✔' : '○') + '</span>' +
+        '<span class="nm">' + m.mat + ' <span class="dim">' + m.name + '</span></span>' +
+        '<span class="lot">' + m.lot + '</span>' +
+        '<span class="dim">' + m.qty + '</span></div>';
+    }).join('');
+    var n = MATS.filter(function (m) { return m.ok; }).length;
+    var b = document.getElementById('b1');
+    b.textContent = n + ' / ' + MATS.length;
+    b.className = 'badge st ' + (n === MATS.length ? 'st-run' : 'st-idle');
+    document.getElementById('st1').classList.toggle('ok', n === MATS.length);
+    checkReady();
+  }
+
+  function doScan() {
+    var v = document.getElementById('scan-lot').value.trim().toUpperCase();
+    var msg = document.getElementById('scan-msg');
+    if (!v) return;
+    var hit = MATS.filter(function (m) { return m.lot === v || m.mat === v; })[0];
+    if (!hit) {
+      // 에러프루핑 : 지시서에 없는 LOT 은 받지 않는다 (사전조사 #19)
+      msg.innerHTML = '<span style="color:var(--bad)">✖ 지시서에 등록되지 않은 LOT 입니다 — ' + v +
+        '<br>오투입 방지를 위해 진행이 차단됩니다. 자재를 다시 확인하세요.</span>';
+    } else if (hit.ok) {
+      msg.innerHTML = '<span style="color:var(--warn)">이미 확인된 자재입니다 — ' + hit.mat + '</span>';
+    } else {
+      hit.ok = true;
+      msg.innerHTML = '<span style="color:var(--ok)">✔ ' + hit.mat + ' ' + hit.name + ' 확인 (' + hit.lot + ')</span>';
+    }
+    document.getElementById('scan-lot').value = '';
+    document.getElementById('scan-lot').focus();
+    drawMats();
+  }
+  document.getElementById('btn-scan').onclick = doScan;
+  document.getElementById('scan-lot').addEventListener('keyup', function (e) { if (e.key === 'Enter') doScan(); });
+
+  // ------- ② 셋업 체크리스트 -------
+  var CHKS = [
+    '설비 주변 정리정돈 및 이물 제거',
+    '금형 / 치공구 품번 일치 확인',
+    '온도 · 압력 설정값 작업표준 일치',
+    '초물 외관 육안 검사 실시',
+    '이전 품목 잔여자재 제거 (교차오염 방지)'
+  ];
+  document.getElementById('chks').innerHTML = CHKS.map(function (c, i) {
+    return '<label id="c' + i + '"><input type="checkbox" data-i="' + i + '"><span>' + c + '</span></label>';
+  }).join('');
+
+  Array.prototype.forEach.call(document.querySelectorAll('#chks input'), function (inp) {
+    inp.onchange = function () {
+      document.getElementById('c' + inp.dataset.i).classList.toggle('on', inp.checked);
+      var n = document.querySelectorAll('#chks input:checked').length;
+      var b = document.getElementById('b2');
+      b.textContent = n + ' / ' + CHKS.length;
+      b.className = 'badge st ' + (n === CHKS.length ? 'st-run' : 'st-idle');
+      document.getElementById('st2').classList.toggle('ok', n === CHKS.length);
+      checkReady();
+    };
+  });
+
+  // ------- 작업 제어 -------
+  var state = 'idle', t0 = 0, acc = 0, tick = null;
+
+  function checkReady() {
+    var matOk = MATS.every(function (m) { return m.ok; });
+    var chkOk = document.querySelectorAll('#chks input:checked').length === CHKS.length;
+    var ready = matOk && chkOk;
+    if (state === 'idle') {
+      document.getElementById('btn-start').disabled = !ready;
+      document.getElementById('timer-lbl').textContent = ready
+        ? '준비 완료 — 작업시작 버튼을 누르세요'
+        : '작업 시작 전 — 1·2단계를 완료하세요';
+    }
+  }
+
+  function fmt(ms) {
+    var s = Math.floor(ms / 1000);
+    return [Math.floor(s / 3600), Math.floor(s / 60) % 60, s % 60]
+      .map(function (v) { return String(v).padStart(2, '0'); }).join(':');
+  }
+
+  function paint() {
+    var el = document.getElementById('timer');
+    el.textContent = fmt(acc + (state === 'run' ? Date.now() - t0 : 0));
+    el.classList.toggle('run', state === 'run');
+  }
+
+  function setState(s) {
+    state = s;
+    var st = document.getElementById('run-st');
+    var lbl = document.getElementById('timer-lbl');
+    document.getElementById('btn-start').disabled = s !== 'idle';
+    document.getElementById('btn-pause').disabled = s === 'idle' || s === 'end';
+    document.getElementById('btn-end').disabled = s === 'idle' || s === 'end';
+    document.getElementById('down-wrap').style.display = s === 'pause' ? '' : 'none';
+
+    if (s === 'run') { st.className = 'st st-run'; st.textContent = '가동'; lbl.textContent = '작업 진행 중 — 실적을 등록하세요'; document.getElementById('ctrl-sub').textContent = '작업 진행 중'; }
+    if (s === 'pause') { st.className = 'st st-set'; st.textContent = '일시정지'; lbl.textContent = '비가동 — 사유를 선택하세요'; document.getElementById('ctrl-sub').textContent = '비가동'; }
+    if (s === 'end') { st.className = 'st st-done'; st.textContent = '종료'; lbl.textContent = '작업 종료 — 실적이 마감되었습니다'; document.getElementById('ctrl-sub').textContent = '종료'; }
+    if (s === 'idle') { st.className = 'st st-idle'; st.textContent = '대기'; document.getElementById('ctrl-sub').textContent = '대기 중'; }
+    checkReady();
+  }
+
+  document.getElementById('btn-start').onclick = function () {
+    t0 = Date.now(); setState('run');
+    tick = setInterval(paint, 250); paint();
+  };
+  document.getElementById('btn-pause').onclick = function () {
+    if (state === 'run') { acc += Date.now() - t0; setState('pause'); }
+    else if (state === 'pause') { t0 = Date.now(); setState('run'); }
+    paint();
+  };
+  document.getElementById('btn-end').onclick = function () {
+    if (!confirm('작업을 종료하고 실적을 마감합니다.\n\n양품 ' + good.toLocaleString() + ' / 불량 ' + bad.toLocaleString() + '\n계속하시겠습니까?')) return;
+    if (state === 'run') acc += Date.now() - t0;
+    clearInterval(tick); setState('end'); paint();
+    document.getElementById('reg-msg').innerHTML =
+      '<span style="color:var(--ok)">✔ 작업 마감 완료 — ERP 생산실적 전송 대기열에 등록되었습니다 (' + Mock.hhmm(new Date()) + ')</span>';
+  };
+
+  var dc = document.getElementById('down-code');
+  Mock.DOWN_CODES.forEach(function (d) { dc.add(new Option(d.code + '  ' + d.name + '  [' + d.loss + ']', d.code)); });
+
+  // ------- ③ 실적 등록 -------
+  var good = 0, bad = 0;
+  var kp = document.getElementById('kp');
+  ['7','8','9','4','5','6','1','2','3','C','0','←'].forEach(function (k) {
+    var b = document.createElement('button');
+    b.textContent = k;
+    b.onclick = function () {
+      var i = document.getElementById('inp-qty');
+      if (k === 'C') i.value = '';
+      else if (k === '←') i.value = i.value.slice(0, -1);
+      else i.value = (i.value + k).replace(/^0+(?=\d)/, '');
+    };
+    kp.appendChild(b);
+  });
+
+  var sd = document.getElementById('sel-def');
+  Mock.defects().forEach(function (d) { sd.add(new Option(d.code + '  ' + d.name, d.code)); });
+
+  function reg(isGood) {
+    if (state !== 'run') { alert('작업이 진행 중일 때만 실적을 등록할 수 있습니다.'); return; }
+    var i = document.getElementById('inp-qty');
+    var n = parseInt(i.value || '0', 10);
+    if (!n) { alert('수량을 입력하세요.'); return; }
+    // 오입력 방지 2단계 확인 (WI-06 결정사항)
+    var t = isGood ? '양품' : '불량 (' + sd.options[sd.selectedIndex].text + ')';
+    if (!confirm(t + ' ' + n.toLocaleString() + ' ' + WO.unit + ' 등록하시겠습니까?')) return;
+
+    if (isGood) good += n; else bad += n;
+    document.getElementById('q-good').textContent = good.toLocaleString();
+    document.getElementById('q-bad').textContent = bad.toLocaleString();
+    document.getElementById('b3').textContent = '누적 ' + (good + bad).toLocaleString() + ' ' + WO.unit +
+      ' · 달성 ' + ((good + bad) / WO.qty * 100).toFixed(1) + '%';
+    i.value = '';
+    document.getElementById('reg-msg').innerHTML =
+      '<span style="color:var(--ok)">✔ ' + t + ' ' + n.toLocaleString() + ' 등록 (' + Mock.hhmm(new Date()) + ' / ' + fOp.value + ')</span>';
+
+    if (!isGood && (bad / (good + bad)) > 0.03) {
+      document.getElementById('reg-msg').innerHTML +=
+        '<br><span style="color:var(--bad)">⚠ 불량률 3% 초과 — 품질보증팀 확인이 필요합니다</span>';
+    }
+  }
+  document.getElementById('btn-good').onclick = function () { reg(true); };
+  document.getElementById('btn-bad').onclick = function () { reg(false); };
+
+  // ------- 공구 수명 -------
+  var TOOLS = [
+    { n: '코팅 다이 #CT-D12', use: 8420, max: 10000 },
+    { n: '슬리터 나이프 세트', use: 4610, max: 6000 },
+    { n: '권취 샤프트 B',      use: 1180, max: 8000 }
+  ];
+  document.getElementById('life').innerHTML = TOOLS.map(function (t) {
+    var p = t.use / t.max * 100;
+    var c = p > 90 ? 'var(--bad)' : p > 75 ? 'var(--warn)' : 'var(--accent)';
+    return '<div class="life"><div class="t"><span>' + t.n + '</span>' +
+      '<span style="color:' + c + '">' + t.use.toLocaleString() + ' / ' + t.max.toLocaleString() + '</span></div>' +
+      '<div class="mini-bar"><i style="width:' + p.toFixed(0) + '%;background:' + c + '"></i></div></div>';
+  }).join('') + '<div class="note">사용량 90% 초과 시 교체 알림이 발생하며, 100% 도달 시 작업시작이 차단됩니다.</div>';
+
+  // ------- 작업표준서 -------
+  var DOCS = [
+    { n: '코팅 작업표준서', rev: 'Rev.7 (26-08-30)' },
+    { n: '검사기준서 SH-CF100', rev: 'Rev.4 (26-07-12)' },
+    { n: '설비 일상점검표', rev: 'Rev.2 (26-05-02)' },
+    { n: '이상처리 절차서', rev: 'Rev.3 (26-06-19)' }
+  ];
+  document.getElementById('docs').innerHTML = DOCS.map(function (d) {
+    return '<a onclick="alert(\'' + d.n + ' ' + d.rev + ' 열람\\n\\n구버전 문서는 시스템에서 열람할 수 없습니다.\')">' +
+      '<span>' + d.n + '</span><span class="rev">' + d.rev + '</span></a>';
+  }).join('');
+
+  // ------- 4M -------
+  document.getElementById('btn-m4').onclick = function () {
+    var txt = document.getElementById('m4-txt').value.trim();
+    if (!txt) { alert('변경 내용을 입력하세요.'); return; }
+    alert('4M 변경점이 등록되었습니다.\n\n구분 : ' + document.getElementById('m4-type').value +
+      '\n내용 : ' + txt + '\n등록자 : ' + fOp.value +
+      '\n\n초물검사가 자동 요청되었습니다. (품질보증팀 알림 발송)');
+    document.getElementById('m4-txt').value = '';
+  };
+
+  drawMats();
+  setState('idle');
+  paint();
+})();
+</script>
+</body>
+</html>
