@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>품질관리 · SPC · SH-MES</title>
+<link rel="stylesheet" href="../assets/css/app.css">
+<style>
+  .judge { padding: 10px 13px; border-radius: 3px; font-size: 12px; margin-top: 10px; }
+  .judge.ok { background: rgba(70,196,107,.1); border: 1px solid rgba(70,196,107,.35); color: #9fe0b2; }
+  .judge.ng { background: rgba(229,84,75,.1); border: 1px solid rgba(229,84,75,.4); color: #f2938c; }
+  .judge b { display: block; margin-bottom: 4px; }
+  .cpk { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 10px; }
+  .cpk div { background: #0f151d; border: 1px solid var(--line); border-radius: 3px; padding: 8px 10px; }
+  .cpk .l { font-size: 10.5px; color: var(--txt-dim); }
+  .cpk .v { font-size: 19px; font-family: var(--mono); font-weight: 700; }
+</style>
+</head>
+<body data-page="quality" data-title="품질관리 · SPC" data-crumb="M-06 / 설비 · 품질">
+
+<div class="filters">
+  <label>설비</label>
+  <select id="f-eq"><option>CT-01 코팅 1라인</option><option>CT-02 코팅 2라인</option><option>MIX-02 배합 2호기</option></select>
+  <label>품번</label>
+  <select><option>SH-CF100 절연 코팅필름</option></select>
+  <label>측정 항목</label>
+  <select id="f-char"><option>코팅 두께 (mm)</option><option>점도 (cP)</option><option>접착강도 (N/25mm)</option></select>
+  <label>부분군</label>
+  <select><option>n = 5</option><option>n = 4</option><option>n = 3</option></select>
+  <button class="btn pri" id="btn-go">조회</button>
+  <div style="flex:1"></div>
+  <button class="btn" id="btn-ins">검사성적 입력</button>
+  <button class="btn danger" id="btn-ncr">부적합 등록</button>
+</div>
+
+<div class="cpk" id="cpk"></div>
+
+<div class="grid" style="grid-template-columns:1fr 330px;margin-bottom:12px">
+  <div class="card">
+    <header>
+      <h2>X-bar 관리도</h2><span class="sub" id="sub-x"></span>
+      <div class="spacer"></div>
+      <div class="legend">
+        <span><i style="background:#00a9a5"></i>측정값</span>
+        <span><i style="background:#e0a83a"></i>UCL / LCL</span>
+        <span><i style="background:#e5544b"></i>규격(USL/LSL)</span>
+      </div>
+    </header>
+    <div class="body"><div id="ch-x"></div></div>
+  </div>
+
+  <div class="card">
+    <header><h2>관리이탈 판정</h2><span class="sub">Nelson Rule</span></header>
+    <div class="body" id="rules"></div>
+  </div>
+</div>
+
+<div class="grid g2" style="margin-bottom:12px">
+  <div class="card">
+    <header><h2>R 관리도 (범위)</h2><span class="sub">부분군 내 산포</span></header>
+    <div class="body"><div id="ch-r"></div></div>
+  </div>
+  <div class="card">
+    <header><h2>측정값 분포</h2><span class="sub">히스토그램 · 규격 대비</span></header>
+    <div class="body"><div id="ch-h"></div>
+      <div class="note">공정 중심이 규격 중심보다 상단에 치우쳐 있습니다. Cpk가 Cp보다 낮은 원인입니다.</div>
+    </div>
+  </div>
+</div>
+
+<div class="grid g2">
+  <div class="card">
+    <header><h2>검사 실적</h2><span class="sub">금일 · 수입 / 공정 / 출하</span></header>
+    <div class="body tight">
+      <table class="tb">
+        <thead><tr><th>검사구분</th><th>품번</th><th>LOT</th><th class="num">검사수</th><th class="num">부적합</th><th>판정</th><th>검사자</th></tr></thead>
+        <tbody id="tb-ins"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <header><h2>부적합 처리 현황</h2><span class="sub">NCR · 미결 우선</span></header>
+    <div class="body tight">
+      <table class="tb">
+        <thead><tr><th>NCR 번호</th><th>내용</th><th>등급</th><th>조치</th><th>상태</th></tr></thead>
+        <tbody id="tb-ncr"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<script src="../assets/js/auth.js"></script>
+<script src="../assets/js/mock.js"></script>
+<script src="../assets/js/chart.js"></script>
+<script src="../assets/js/shell.js"></script>
+<script>
+(function () {
+  var s = Mock.spc(25);
+  var labels = s.xbar.map(function (_, i) { return '#' + (i + 1); });
+
+  document.getElementById('sub-x').textContent =
+    'CL ' + s.xCL + ' / UCL ' + s.xUCL + ' / LCL ' + s.xLCL + ' (mm)';
+
+  // ---- Cp / Cpk ----
+  var cpkCol = s.cpk >= 1.33 ? 'var(--ok)' : s.cpk >= 1.0 ? 'var(--warn)' : 'var(--bad)';
+  document.getElementById('cpk').innerHTML =
+    '<div><div class="l">공정능력지수 Cp</div><div class="v">' + s.cp.toFixed(2) + '</div></div>' +
+    '<div><div class="l">치우침 반영 Cpk</div><div class="v" style="color:' + cpkCol + '">' + s.cpk.toFixed(2) + '</div></div>' +
+    '<div><div class="l">규격 (USL / LSL)</div><div class="v" style="font-size:15px">' + s.usl + ' / ' + s.lsl + '</div></div>' +
+    '<div><div class="l">판정</div><div class="v" style="font-size:15px;color:' + cpkCol + '">' +
+      (s.cpk >= 1.33 ? '공정능력 충분' : s.cpk >= 1.0 ? '관리 필요' : '공정능력 부족') + '</div></div>';
+
+  // ---- X-bar ----
+  Chart.line(document.getElementById('ch-x'), {
+    labels: labels, h: 210,
+    min: s.lsl - 0.004, max: s.usl + 0.004,
+    series: [{ name: 'X-bar', color: '#00a9a5', data: s.xbar, dots: true }],
+    refs: [
+      { v: s.usl,  color: '#e5544b', label: 'USL ' + s.usl },
+      { v: s.xUCL, color: '#e0a83a', label: 'UCL' },
+      { v: s.xCL,  color: '#5a6b80', label: 'CL' },
+      { v: s.xLCL, color: '#e0a83a', label: 'LCL' },
+      { v: s.lsl,  color: '#e5544b', label: 'LSL ' + s.lsl }
+    ]
+  });
+
+  // ---- R ----
+  Chart.line(document.getElementById('ch-r'), {
+    labels: labels, h: 170, min: 0, max: s.rUCL * 1.2,
+    series: [{ name: 'R', color: '#3d8bfd', data: s.r, dots: true }],
+    refs: [{ v: s.rUCL, color: '#e0a83a', label: 'UCL' }, { v: s.rCL, color: '#5a6b80', label: 'CL' }]
+  });
+
+  // ---- 히스토그램 ----
+  var bins = 11, lo = s.lsl - 0.003, hi = s.usl + 0.003, w = (hi - lo) / bins;
+  var hist = new Array(bins).fill(0);
+  s.xbar.forEach(function (v) {
+    var i = Math.min(bins - 1, Math.max(0, Math.floor((v - lo) / w)));
+    hist[i]++;
+  });
+  Chart.bars(document.getElementById('ch-h'), {
+    labels: hist.map(function (_, i) { return (lo + w * (i + 0.5)).toFixed(3); }),
+    data: hist, h: 170,
+    colors: hist.map(function (_, i) {
+      var c = lo + w * (i + 0.5);
+      return (c > s.usl || c < s.lsl) ? '#e5544b' : '#00a9a5';
+    })
+  });
+
+  // ---- 관리이탈 판정 (Nelson Rule 일부) ----
+  var viol = [];
+  s.xbar.forEach(function (v, i) {
+    if (v > s.xUCL || v < s.xLCL) viol.push({ r: 'Rule 1', d: '#' + (i + 1) + ' 관리한계 이탈 (' + v + ')' });
+  });
+  // Rule 2 : 연속 7점이 중심선 한쪽에
+  for (var i = 6; i < s.xbar.length; i++) {
+    var seg = s.xbar.slice(i - 6, i + 1);
+    if (seg.every(function (v) { return v > s.xCL; }) || seg.every(function (v) { return v < s.xCL; })) {
+      viol.push({ r: 'Rule 2', d: '#' + (i - 5) + '~#' + (i + 1) + ' 연속 7점 중심선 편향' });
+      break;
+    }
+  }
+  // Rule 3 : 연속 6점 상승/하강
+  for (var j = 5; j < s.xbar.length; j++) {
+    var up = true, dn = true;
+    for (var k = j - 5; k < j; k++) {
+      if (s.xbar[k + 1] <= s.xbar[k]) up = false;
+      if (s.xbar[k + 1] >= s.xbar[k]) dn = false;
+    }
+    if (up || dn) { viol.push({ r: 'Rule 3', d: '#' + (j - 4) + '~#' + (j + 1) + ' 연속 6점 ' + (up ? '상승' : '하강') + ' 경향' }); break; }
+  }
+
+  document.getElementById('rules').innerHTML =
+    (viol.length
+      ? '<div class="judge ng"><b>⚠ 관리이탈 ' + viol.length + '건 검출</b>' +
+        viol.map(function (v) { return '· [' + v.r + '] ' + v.d; }).join('<br>') + '</div>'
+      : '<div class="judge ok"><b>✔ 관리상태 양호</b>적용 룰에서 이탈이 검출되지 않았습니다.</div>') +
+    '<div style="margin-top:12px;font-size:11.5px;line-height:2;color:var(--txt-dim)">' +
+    '<b style="color:var(--txt)">적용 판정 규칙</b><br>' +
+    'Rule 1 — 1점이 관리한계(3σ) 이탈<br>' +
+    'Rule 2 — 연속 7점이 중심선 한쪽<br>' +
+    'Rule 3 — 연속 6점 상승 또는 하강<br>' +
+    'Rule 4 — 연속 14점 교대 증감</div>' +
+    '<div class="note">중결함 판정 시 다음 공정 진행이 자동 차단됩니다. 경결함은 경고 후 진행을 허용합니다. (2026-09-02 품보팀 합의)</div>';
+
+  // ---- 검사 실적 ----
+  var INS = [
+    { g: '수입검사', it: 'BD-2200', lot: 'L26-0817', n: 5, ng: 0, p: '합격', by: '이지혜' },
+    { g: '수입검사', it: 'SV-0110', lot: 'L26-0902', n: 5, ng: 0, p: '합격', by: '이지혜' },
+    { g: '공정검사', it: 'SH-CF100', lot: 'HS1-CT01-260923-014', n: 25, ng: 2, p: '조건부', by: '오승현' },
+    { g: '공정검사', it: 'SH-EM220', lot: 'HS1-MIX02-260923-004', n: 10, ng: 0, p: '합격', by: '한지원' },
+    { g: '출하검사', it: 'SH-CF100', lot: 'HS1-PK01-260923-041', n: 20, ng: 0, p: '합격', by: '이지혜' },
+    { g: '공정검사', it: 'SH-AD330', lot: 'HS1-MIX01-260923-003', n: 10, ng: 1, p: '불합격', by: '류경민' }
+  ];
+  var pCls = { '합격': 'st-run', '조건부': 'st-set', '불합격': 'st-stop' };
+  document.getElementById('tb-ins').innerHTML = INS.map(function (r) {
+    return '<tr><td>' + r.g + '</td><td>' + r.it + '</td><td class="lot">' + r.lot + '</td>' +
+      '<td class="num">' + r.n + '</td><td class="num"' + (r.ng ? ' style="color:var(--bad)"' : '') + '>' + r.ng + '</td>' +
+      '<td><span class="st ' + pCls[r.p] + '">' + r.p + '</span></td><td>' + r.by + '</td></tr>';
+  }).join('');
+
+  // ---- NCR ----
+  var NCR = [
+    { no: 'NCR-260923-02', c: 'SH-AD330 점도 9,140cP — 상한(9,000) 초과', g: '중결함', a: '재작업', s: '진행' },
+    { no: 'NCR-260923-01', c: 'CT-01 두께 관리상한 연속 이탈', g: '중결함', a: '조사중', s: '진행' },
+    { no: 'NCR-260922-04', c: '포장 라벨 인쇄 번짐 12EA', g: '경결함', a: '선별', s: '완료' },
+    { no: 'NCR-260922-03', c: '이형필름 표면 이물 혼입', g: '중결함', a: '폐기', s: '완료' },
+    { no: 'NCR-260921-07', c: '조립 체결 토크 미달 3EA', g: '경결함', a: '재작업', s: '완료' }
+  ];
+  document.getElementById('tb-ncr').innerHTML = NCR.map(function (r) {
+    return '<tr><td class="lot">' + r.no + '</td><td style="white-space:normal">' + r.c + '</td>' +
+      '<td><span class="st ' + (r.g === '중결함' ? 'st-stop' : 'st-set') + '">' + r.g + '</span></td>' +
+      '<td>' + r.a + '</td>' +
+      '<td><span class="st ' + (r.s === '완료' ? 'st-done' : 'st-run') + '">' + r.s + '</span></td></tr>';
+  }).join('');
+
+  document.getElementById('btn-ins').onclick = function () {
+    alert('검사성적 입력\n\n검사구분 / 품번 / LOT / 측정값(n=5)을 입력합니다.\n입력 즉시 관리도에 반영되며 관리이탈 룰이 자동 판정됩니다.');
+  };
+  document.getElementById('btn-ncr').onclick = function () {
+    alert('부적합(NCR) 등록\n\n등급 : 중결함 / 경결함\n조치 : 재작업 · 특채 · 폐기 · 반품\n\n중결함 등록 시 해당 LOT 의 다음 공정 진행이 즉시 차단됩니다.');
+  };
+  document.getElementById('btn-go').onclick = function () { location.reload(); };
+})();
+</script>
+</body>
+</html>

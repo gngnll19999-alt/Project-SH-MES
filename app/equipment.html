@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>설비관리 · OEE · SH-MES</title>
+<link rel="stylesheet" href="../assets/css/app.css">
+<style>
+  .eqcard {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 4px;
+    padding: 11px 12px; position: relative;
+  }
+  .eqcard .top { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+  .eqcard .top b { font-size: 13px; }
+  .eqcard .top .sp { flex: 1; }
+  .eqcard .met { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin: 9px 0 6px; }
+  .eqcard .met div { text-align: center; }
+  .eqcard .met .l { font-size: 9.5px; color: var(--txt-dim); }
+  .eqcard .met .v { font-size: 14px; font-family: var(--mono); }
+  .eqcard .oee { font-size: 22px; font-family: var(--mono); font-weight: 700; }
+  .eqcard .lip { position: absolute; left: 0; top: 0; bottom: 0; width: 3px; }
+  /* ISA-101 : 정상은 무채색, 이상에만 색을 준다 */
+  .eqcard.s-가동 .lip { background: #46c46b; }
+  .eqcard.s-셋업 .lip { background: #e0a83a; }
+  .eqcard.s-정지 .lip { background: #e5544b; }
+  .eqcard.s-대기 .lip { background: #4d5a6e; }
+  .eqcard.s-정지 { border-color: rgba(229,84,75,.45); }
+</style>
+</head>
+<body data-page="equipment" data-title="설비관리 · OEE" data-crumb="M-05 / 설비 · 품질">
+
+<div class="filters">
+  <label>기간</label>
+  <select><option>금일</option><option>금주</option><option>당월</option></select>
+  <label>설비 유형</label>
+  <select id="f-type"><option value="">전체</option><option>배합</option><option>코팅</option><option>조립</option><option>검사</option><option>포장</option></select>
+  <button class="btn pri">조회</button>
+  <div style="flex:1"></div>
+  <div class="legend">
+    <span><i style="background:#46c46b"></i>가동</span>
+    <span><i style="background:#e0a83a"></i>셋업</span>
+    <span><i style="background:#4d5a6e"></i>대기</span>
+    <span><i style="background:#e5544b"></i>정지</span>
+  </div>
+</div>
+
+<div class="grid" style="grid-template-columns:200px 1fr;margin-bottom:12px">
+  <div class="card">
+    <header><h2>종합 OEE</h2></header>
+    <div class="body" style="padding:6px"><div id="g-oee"></div></div>
+  </div>
+  <div class="grid g4" id="kpi"></div>
+</div>
+
+<div class="card" style="margin-bottom:12px">
+  <header><h2>설비 상태 보드</h2><span class="sub">실시간 · ISA-101 색 규칙 적용</span></header>
+  <div class="body">
+    <div class="grid g4" id="eqs"></div>
+  </div>
+</div>
+
+<div class="grid g2" style="margin-bottom:12px">
+  <div class="card">
+    <header><h2>6대 로스 분석</h2><span class="sub">TPM 분류 · 금일 손실시간(분)</span></header>
+    <div class="body"><div id="ch-loss"></div>
+      <div class="note">계획정지(계획보전·식사)는 부하시간에서 제외하므로 로스에 포함하지 않습니다. (2026-09-18 생산팀 기준 합의)</div>
+    </div>
+  </div>
+  <div class="card">
+    <header><h2>비가동 사유 파레토</h2><span class="sub">금주 누계 · 발생건수</span></header>
+    <div class="body"><div id="ch-down"></div></div>
+  </div>
+</div>
+
+<div class="grid g2">
+  <div class="card">
+    <header><h2>설비별 신뢰성 지표</h2><span class="sub">MTBF / MTTR · 최근 30일</span></header>
+    <div class="body tight">
+      <table class="tb">
+        <thead><tr><th>설비</th><th class="num">MTBF(분)</th><th class="num">MTTR(분)</th><th class="num">고장건수</th><th>OEE 추이</th></tr></thead>
+        <tbody id="tb-rel"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <header><h2>예방보전 일정</h2><span class="sub">PM 계획 대비 실적</span></header>
+    <div class="body tight">
+      <table class="tb">
+        <thead><tr><th>설비</th><th>보전 항목</th><th>주기</th><th>예정일</th><th>상태</th></tr></thead>
+        <tbody id="tb-pm"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<script src="../assets/js/auth.js"></script>
+<script src="../assets/js/mock.js"></script>
+<script src="../assets/js/chart.js"></script>
+<script src="../assets/js/shell.js"></script>
+<script>
+(function () {
+  var eq = Mock.equipments();
+
+  function render(list) {
+    // ---- 종합 OEE ----
+    var A = list.reduce(function (a, e) { return a + e.avail; }, 0) / list.length;
+    var P = list.reduce(function (a, e) { return a + e.perf; }, 0) / list.length;
+    var Q = list.reduce(function (a, e) { return a + e.qual; }, 0) / list.length;
+    var oee = A * P * Q / 10000;
+    Chart.gauge(document.getElementById('g-oee'), oee, { label: '목표 85.0%', target: 85 });
+
+    document.getElementById('kpi').innerHTML = [
+      { l: '시간가동률 (A)', v: A.toFixed(1), u: '%', s: '부하시간 대비 실가동시간', c: A >= 90 ? 'k-ok' : 'k-warn' },
+      { l: '성능가동률 (P)', v: P.toFixed(1), u: '%', s: '설계 CT 대비 실제 속도', c: P >= 90 ? 'k-ok' : 'k-warn' },
+      { l: '양품률 (Q)', v: Q.toFixed(1), u: '%', s: '투입 대비 양품 수량', c: Q >= 98 ? 'k-ok' : 'k-warn' },
+      { l: '가동 / 정지', v: list.filter(function (e) { return e.status === '가동'; }).length + ' / ' +
+          list.filter(function (e) { return e.status === '정지'; }).length, u: '대',
+        s: '셋업 ' + list.filter(function (e) { return e.status === '셋업'; }).length + '대', c: '' }
+    ].map(function (k) {
+      return '<div class="kpi ' + k.c + '"><div class="bar"></div><div class="lbl">' + k.l + '</div>' +
+        '<div class="val">' + k.v + '<small>' + k.u + '</small></div><div class="dlt dim">' + k.s + '</div></div>';
+    }).join('');
+
+    // ---- 상태 보드 ----
+    var stCls = { '가동': 'st-run', '대기': 'st-idle', '정지': 'st-stop', '셋업': 'st-set' };
+    document.getElementById('eqs').innerHTML = list.map(function (e) {
+      var col = e.oee >= 85 ? 'var(--ok)' : e.oee >= 65 ? 'var(--txt)' : 'var(--bad)';
+      return '<div class="eqcard s-' + e.status + '"><div class="lip"></div>' +
+        '<div class="top"><b>' + e.code + '</b><span class="dim" style="font-size:10.5px">' + e.name + '</span>' +
+        '<span class="sp"></span><span class="st ' + stCls[e.status] + '">' + e.status + '</span></div>' +
+        '<div class="dim" style="font-size:10.5px">품번 ' + e.item + ' · ' + e.since + ' 부터</div>' +
+        '<div class="met">' +
+          '<div><div class="l">가동</div><div class="v">' + e.avail.toFixed(0) + '</div></div>' +
+          '<div><div class="l">성능</div><div class="v">' + e.perf.toFixed(0) + '</div></div>' +
+          '<div><div class="l">양품</div><div class="v">' + e.qual.toFixed(1) + '</div></div>' +
+        '</div>' +
+        '<div style="display:flex;align-items:baseline;gap:6px">' +
+          '<span class="dim" style="font-size:10.5px">OEE</span>' +
+          '<span class="oee" style="color:' + col + '">' + e.oee.toFixed(1) + '</span>' +
+          '<span class="dim" style="font-size:10.5px">%</span></div>' +
+        (e.downCode ? '<div class="note" style="color:#f0786f;border-color:var(--bad)">정지 사유 ' +
+          e.downCode.code + ' ' + e.downCode.name + '</div>' : '') +
+        '</div>';
+    }).join('');
+
+    // ---- 신뢰성 ----
+    var tb = document.getElementById('tb-rel');
+    tb.innerHTML = list.map(function (e) {
+      return '<tr><td><b>' + e.code + '</b> <span class="dim">' + e.name + '</span></td>' +
+        '<td class="num">' + e.mtbf + '</td>' +
+        '<td class="num" style="color:' + (e.mttr > 45 ? 'var(--warn)' : 'inherit') + '">' + e.mttr + '</td>' +
+        '<td class="num">' + Math.max(1, Math.round(1200 / e.mtbf)) + '</td>' +
+        '<td><span class="sp' + e.code.replace(/[^A-Z0-9]/g, '') + '"></span></td></tr>';
+    }).join('');
+    list.forEach(function (e) {
+      var host = tb.querySelector('.sp' + e.code.replace(/[^A-Z0-9]/g, ''));
+      if (host) Chart.spark(host, e.trend, e.oee >= 85 ? '#46c46b' : '#e0a83a');
+    });
+  }
+
+  render(eq);
+  document.getElementById('f-type').onchange = function () {
+    var v = this.value;
+    render(v ? eq.filter(function (e) { return e.type === v; }) : eq);
+  };
+
+  // ---- 6대 로스 ----
+  var LOSS = [
+    { n: '고장',        v: 186 },
+    { n: '작업준비·조정', v: 244 },
+    { n: '순간정지',     v: 97 },
+    { n: '속도저하',     v: 141 },
+    { n: '공정불량',     v: 68 },
+    { n: '초기수율',     v: 52 }
+  ];
+  Chart.bars(document.getElementById('ch-loss'), {
+    labels: LOSS.map(function (x) { return x.n; }),
+    data: LOSS.map(function (x) { return x.v; }),
+    colors: LOSS.map(function (x, i) { return i === 1 ? '#e5544b' : i === 0 ? '#e0a83a' : '#00a9a5'; }),
+    h: 186, showValue: true
+  });
+
+  // ---- 비가동 파레토 ----
+  var cnt = [31, 24, 19, 15, 12, 9, 7, 5];
+  var codes = Mock.DOWN_CODES.slice(0, 8);
+  Chart.bars(document.getElementById('ch-down'), {
+    labels: codes.map(function (c) { return c.code; }),
+    data: cnt,
+    colors: cnt.map(function (v, i) { return i < 2 ? '#e5544b' : i < 4 ? '#e0a83a' : '#4a5a70'; }),
+    h: 186, showValue: true
+  });
+
+  // ---- 예방보전 ----
+  var PM = [
+    { eq: 'MIX-01', item: '교반기 베어링 그리스 주입', cyc: '월 1회' },
+    { eq: 'CT-01',  item: '코팅 다이 분해 세정',       cyc: '주 1회' },
+    { eq: 'CT-02',  item: '건조로 필터 교체',          cyc: '월 1회' },
+    { eq: 'AS-01',  item: '체결 토크 검교정',          cyc: '분기 1회' },
+    { eq: 'AS-02',  item: '컨베이어 체인 장력 점검',   cyc: '월 1회' },
+    { eq: 'INS-01', item: '비전 카메라 캘리브레이션',  cyc: '주 1회' },
+    { eq: 'PK-01',  item: '실링 히터 저항 측정',       cyc: '월 1회' }
+  ];
+  document.getElementById('tb-pm').innerHTML = PM.map(function (p, i) {
+    var e = eq.filter(function (x) { return x.code === p.eq; })[0] || eq[0];
+    var d = new Date(e.nextPm);
+    var over = d < new Date();
+    var soon = !over && (d - new Date()) < 5 * 86400000;
+    var st = over ? '<span class="st st-stop">경과</span>'
+           : soon ? '<span class="st st-set">임박</span>'
+           : '<span class="st st-done">예정</span>';
+    return '<tr><td><b>' + p.eq + '</b></td><td>' + p.item + '</td>' +
+      '<td class="dim">' + p.cyc + '</td><td>' + e.nextPm + '</td><td>' + st + '</td></tr>';
+  }).join('');
+})();
+</script>
+</body>
+</html>
