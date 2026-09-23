@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>생산 모니터링 · SH-MES</title>
+<link rel="stylesheet" href="../assets/css/app.css">
+</head>
+<body data-page="dashboard" data-title="생산 모니터링" data-crumb="M-01 / 현장 운영">
+
+<div class="grid g5" id="kpi" style="margin-bottom:12px"></div>
+
+<div class="grid" style="grid-template-columns: 1fr 340px; margin-bottom:12px">
+  <div class="card">
+    <header>
+      <h2>시간대별 생산량</h2>
+      <span class="sub">계획 대비 실적 · 금일 08:00 ~ 20:00</span>
+      <div class="spacer"></div>
+      <div class="legend">
+        <span><i style="background:#00a9a5"></i>실적</span>
+        <span><i style="background:#5a6b80"></i>계획</span>
+      </div>
+    </header>
+    <div class="body"><div id="ch-hourly"></div>
+      <div class="note">12시 구간 하락은 식사 교대(D10), 15시 구간은 AS-01 품목 변경 셋업(D03)에 따른 계획된 감산입니다.</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <header><h2>종합 OEE</h2><span class="sub">금일 누계</span></header>
+    <div class="body">
+      <div id="ch-oee"></div>
+      <table class="tb" style="margin-top:6px">
+        <tr><td>시간가동률</td><td class="num" id="v-a"></td></tr>
+        <tr><td>성능가동률</td><td class="num" id="v-p"></td></tr>
+        <tr><td>양품률</td><td class="num" id="v-q"></td></tr>
+      </table>
+      <div class="note">목표선 85%는 TPM 세계 최고수준(World Class) 기준입니다.</div>
+    </div>
+  </div>
+</div>
+
+<div class="card" style="margin-bottom:12px">
+  <header>
+    <h2>라인별 진척 현황</h2>
+    <span class="sub">진행 중 작업지시 기준</span>
+    <div class="spacer"></div>
+    <span class="dim" style="font-size:11px" id="refresh-at"></span>
+  </header>
+  <div class="body tight">
+    <table class="tb">
+      <thead>
+        <tr>
+          <th style="width:110px">라인</th><th style="width:70px">상태</th>
+          <th style="width:130px">작업지시</th><th>품번 / 품명</th>
+          <th class="num" style="width:90px">지시</th><th class="num" style="width:90px">실적</th>
+          <th class="num" style="width:70px">불량</th>
+          <th style="width:190px">진척률</th>
+          <th style="width:80px">담당</th><th style="width:70px">OEE</th>
+        </tr>
+      </thead>
+      <tbody id="tb-line"></tbody>
+    </table>
+  </div>
+</div>
+
+<div class="grid g2">
+  <div class="card">
+    <header><h2>불량 유형 파레토</h2><span class="sub">금주 누계 · 상위 8종</span></header>
+    <div class="body"><div id="ch-def"></div></div>
+  </div>
+
+  <div class="card">
+    <header><h2>실시간 이벤트</h2><span class="sub">최근 60분</span></header>
+    <div class="body tight" style="max-height:268px;overflow-y:auto">
+      <table class="tb"><tbody id="tb-ev"></tbody></table>
+    </div>
+  </div>
+</div>
+
+<script src="../assets/js/auth.js"></script>
+<script src="../assets/js/mock.js"></script>
+<script src="../assets/js/chart.js"></script>
+<script src="../assets/js/shell.js"></script>
+<script>
+(function () {
+  var eq = Mock.equipments();
+  var wo = Mock.workOrders();
+  var h  = Mock.hourly();
+
+  // ---- KPI ----
+  var totPlan = h.plan.reduce(function (a, b) { return a + b; }, 0);
+  var totAct  = h.act.reduce(function (a, b) { return a + b; }, 0);
+  var rate    = totAct / totPlan * 100;
+  var badRate = 1.42;
+  var running = eq.filter(function (e) { return e.status === '가동'; }).length;
+  var oee = eq.reduce(function (a, e) { return a + e.oee; }, 0) / eq.length;
+
+  var kpis = [
+    { lbl: '계획 대비 달성률', val: rate.toFixed(1), u: '%', cls: rate >= 95 ? 'k-ok' : 'k-warn',
+      dlt: (rate >= 95 ? '<span class="up">▲</span> ' : '<span class="down">▼</span> ') + '전일 대비 ' + (rate - 94.1 >= 0 ? '+' : '') + (rate - 94.1).toFixed(1) + '%p' },
+    { lbl: '금일 생산량', val: totAct.toLocaleString(), u: 'EA', cls: '',
+      dlt: '<span class="dim">계획 ' + totPlan.toLocaleString() + ' EA</span>' },
+    { lbl: '불량률', val: badRate.toFixed(2), u: '%', cls: badRate > 1.2 ? 'k-warn' : 'k-ok',
+      dlt: '<span class="down">▲</span> 목표 1.20% 초과' },
+    { lbl: '종합 OEE', val: oee.toFixed(1), u: '%', cls: oee >= 85 ? 'k-ok' : 'k-warn',
+      dlt: '<span class="dim">목표 85.0%</span>' },
+    { lbl: '가동 설비', val: running + ' / ' + eq.length, u: '', cls: running === eq.length ? 'k-ok' : 'k-warn',
+      dlt: '<span class="dim">정지 ' + eq.filter(function (e) { return e.status === '정지'; }).length +
+           ' · 셋업 ' + eq.filter(function (e) { return e.status === '셋업'; }).length + '</span>' }
+  ];
+
+  document.getElementById('kpi').innerHTML = kpis.map(function (k) {
+    return '<div class="kpi ' + k.cls + '"><div class="bar"></div>' +
+      '<div class="lbl">' + k.lbl + '</div>' +
+      '<div class="val">' + k.val + (k.u ? '<small>' + k.u + '</small>' : '') + '</div>' +
+      '<div class="dlt">' + k.dlt + '</div></div>';
+  }).join('');
+
+  // ---- 시간대별 ----
+  Chart.line(document.getElementById('ch-hourly'), {
+    labels: h.labels, h: 196, area: true,
+    series: [
+      { name: '계획', color: '#5a6b80', data: h.plan, width: 1.2 },
+      { name: '실적', color: '#00a9a5', data: h.act, dots: true }
+    ]
+  });
+
+  // ---- OEE ----
+  var A = eq.reduce(function (a, e) { return a + e.avail; }, 0) / eq.length;
+  var P = eq.reduce(function (a, e) { return a + e.perf; }, 0) / eq.length;
+  var Q = eq.reduce(function (a, e) { return a + e.qual; }, 0) / eq.length;
+  Chart.gauge(document.getElementById('ch-oee'), oee, { label: 'OEE (A×P×Q)', target: 85 });
+  document.getElementById('v-a').textContent = A.toFixed(1) + ' %';
+  document.getElementById('v-p').textContent = P.toFixed(1) + ' %';
+  document.getElementById('v-q').textContent = Q.toFixed(1) + ' %';
+
+  // ---- 라인별 진척 ----
+  var stCls = { '가동': 'st-run', '대기': 'st-idle', '정지': 'st-stop', '셋업': 'st-set' };
+  document.getElementById('tb-line').innerHTML = eq.map(function (e) {
+    var w = wo.filter(function (x) { return x.line === e.code && (x.status === '진행' || x.status === '투입'); })[0]
+          || wo.filter(function (x) { return x.line === e.code; })[0];
+    var pct = w ? Math.min(100, w.done / w.qty * 100) : 0;
+    var col = pct >= 90 ? 'var(--ok)' : pct >= 50 ? 'var(--accent)' : 'var(--warn)';
+    return '<tr>' +
+      '<td><b>' + e.code + '</b> <span class="dim">' + e.type + '</span></td>' +
+      '<td><span class="st ' + stCls[e.status] + '">' + e.status + '</span></td>' +
+      '<td class="lot">' + (w ? w.no : '-') + '</td>' +
+      '<td>' + (w ? w.item + ' <span class="dim">' + w.itemName + '</span>' : '-') + '</td>' +
+      '<td class="num">' + (w ? w.qty.toLocaleString() : '-') + '</td>' +
+      '<td class="num">' + (w ? w.done.toLocaleString() : '-') + '</td>' +
+      '<td class="num" style="color:' + (w && w.bad > 0 ? 'var(--bad)' : 'inherit') + '">' + (w ? w.bad : '-') + '</td>' +
+      '<td><div class="mini-bar"><i style="width:' + pct.toFixed(0) + '%;background:' + col + '"></i></div>' +
+        '<span class="dim" style="font-size:10px">' + pct.toFixed(1) + '%</span></td>' +
+      '<td>' + (w ? w.worker : '-') + '</td>' +
+      '<td class="num" style="color:' + (e.oee >= 85 ? 'var(--ok)' : e.oee >= 65 ? 'inherit' : 'var(--bad)') + '">' +
+        e.oee.toFixed(1) + '</td>' +
+      '</tr>';
+  }).join('');
+
+  // ---- 불량 파레토 ----
+  var d = Mock.defects();
+  Chart.bars(document.getElementById('ch-def'), {
+    labels: d.map(function (x) { return x.name; }),
+    data: d.map(function (x) { return x.cnt; }),
+    colors: d.map(function (x, i) { return i < 3 ? '#e5544b' : i < 5 ? '#e0a83a' : '#4a5a70'; }),
+    h: 192, showValue: true
+  });
+
+  // ---- 이벤트 ----
+  var lvCol = { bad: 'var(--bad)', warn: 'var(--warn)', info: 'var(--info)' };
+  document.getElementById('tb-ev').innerHTML = Mock.events().map(function (e) {
+    return '<tr>' +
+      '<td class="num dim" style="width:52px">' + e.time + '</td>' +
+      '<td style="width:74px;color:' + lvCol[e.lv] + '">' + e.type + '</td>' +
+      '<td style="white-space:normal">' + e.msg + '</td></tr>';
+  }).join('');
+
+  // ---- 자동 갱신 : 현장 대형 모니터에 상시 표출되므로 화면을 계속 살려둔다 ----
+  function stamp() {
+    document.getElementById('refresh-at').textContent = '최종 갱신 ' + Mock.hhmm(new Date()) + ' · 30초 주기';
+  }
+  stamp();
+  setInterval(function () { stamp(); }, 30000);
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>작업지시 관리 · SH-MES</title>
+<link rel="stylesheet" href="../assets/css/app.css">
+<style>
+  .route { display: flex; gap: 3px; align-items: center; }
+  .route i {
+    font-style: normal; font-size: 10px; padding: 2px 6px; border-radius: 2px;
+    background: #202a37; color: #93a1b3;
+  }
+  .route i.on { background: rgba(0,169,165,.18); color: #52cfcb; }
+  .route i.dn { background: rgba(70,196,107,.14); color: #6bd98c; }
+  .route span { color: #3d4a5c; font-size: 9px; }
+  .detail { background: #131922; }
+  .detail td { padding: 0 !important; }
+  .detail .inner { padding: 14px 18px; border-left: 2px solid var(--accent-dim); }
+</style>
+</head>
+<body data-page="workorder" data-title="작업지시 관리" data-crumb="M-02 / 현장 운영">
+
+<div class="filters">
+  <label>사업장</label>
+  <select id="f-plant"><option>화성1공장</option><option>아산2공장</option></select>
+  <label>라인</label>
+  <select id="f-line"><option value="">전체</option></select>
+  <label>상태</label>
+  <select id="f-status">
+    <option value="">전체</option>
+    <option>계획</option><option>확정</option><option>투입</option>
+    <option>진행</option><option>완료</option><option>마감</option>
+  </select>
+  <label>품번</label>
+  <input type="text" id="f-item" placeholder="SH-" style="width:110px">
+  <button class="btn pri" id="btn-search">조회</button>
+  <button class="btn" id="btn-reset">초기화</button>
+  <div style="flex:1"></div>
+  <button class="btn" id="btn-recv">ERP 생산오더 수신</button>
+  <button class="btn" id="btn-fix">선택 지시 확정</button>
+</div>
+
+<div class="grid g4" style="margin-bottom:12px" id="sum"></div>
+
+<div class="card">
+  <header>
+    <h2>작업지시 목록</h2>
+    <span class="sub" id="cnt"></span>
+    <div class="spacer"></div>
+    <span class="dim" style="font-size:11px">행을 클릭하면 공정경로와 투입자재가 펼쳐집니다</span>
+  </header>
+  <div class="body tight">
+    <table class="tb">
+      <thead>
+        <tr>
+          <th style="width:28px"><input type="checkbox" id="ck-all"></th>
+          <th style="width:130px">작업지시번호</th>
+          <th style="width:100px">ERP 오더</th>
+          <th style="width:96px">품번</th>
+          <th>품명</th>
+          <th style="width:92px">라인</th>
+          <th class="num" style="width:84px">지시수량</th>
+          <th class="num" style="width:84px">실적수량</th>
+          <th class="num" style="width:64px">불량</th>
+          <th style="width:110px">진척률</th>
+          <th style="width:64px">상태</th>
+          <th style="width:92px">납기</th>
+          <th style="width:70px">담당</th>
+        </tr>
+      </thead>
+      <tbody id="tb"></tbody>
+    </table>
+  </div>
+</div>
+
+<script src="../assets/js/auth.js"></script>
+<script src="../assets/js/mock.js"></script>
+<script src="../assets/js/chart.js"></script>
+<script src="../assets/js/shell.js"></script>
+<script>
+(function () {
+  var all = Mock.workOrders();
+  var stCls = { '계획': 'st-idle', '확정': 'st-done', '투입': 'st-set', '진행': 'st-run', '완료': 'st-done', '마감': 'st-idle' };
+
+  // 라인 셀렉트 채우기
+  var sel = document.getElementById('f-line');
+  Mock.LINES.forEach(function (l) {
+    var o = document.createElement('option');
+    o.value = l.code; o.textContent = l.code + ' ' + l.name;
+    sel.appendChild(o);
+  });
+
+  function filtered() {
+    var ln = document.getElementById('f-line').value;
+    var st = document.getElementById('f-status').value;
+    var it = document.getElementById('f-item').value.trim().toUpperCase();
+    return all.filter(function (w) {
+      if (ln && w.line !== ln) return false;
+      if (st && w.status !== st) return false;
+      if (it && w.item.indexOf(it) < 0) return false;
+      return true;
+    });
+  }
+
+  function summary(list) {
+    var byStatus = {};
+    list.forEach(function (w) { byStatus[w.status] = (byStatus[w.status] || 0) + 1; });
+    var qty = list.reduce(function (a, w) { return a + w.qty; }, 0);
+    var done = list.reduce(function (a, w) { return a + w.done; }, 0);
+    var bad = list.reduce(function (a, w) { return a + w.bad; }, 0);
+
+    var cards = [
+      { lbl: '조회 지시 건수', val: list.length, u: '건', sub: '진행 ' + (byStatus['진행'] || 0) + ' · 확정 ' + (byStatus['확정'] || 0) + ' · 계획 ' + (byStatus['계획'] || 0) },
+      { lbl: '총 지시수량', val: qty.toLocaleString(), u: '', sub: '실적 ' + done.toLocaleString() },
+      { lbl: '진척률', val: (done / qty * 100).toFixed(1), u: '%', sub: '완료 ' + ((byStatus['완료'] || 0) + (byStatus['마감'] || 0)) + '건' },
+      { lbl: '불량수량', val: bad.toLocaleString(), u: '', sub: '불량률 ' + (bad / (done || 1) * 100).toFixed(2) + '%' }
+    ];
+    document.getElementById('sum').innerHTML = cards.map(function (c) {
+      return '<div class="kpi"><div class="bar"></div><div class="lbl">' + c.lbl + '</div>' +
+        '<div class="val">' + c.val + (c.u ? '<small>' + c.u + '</small>' : '') + '</div>' +
+        '<div class="dlt dim">' + c.sub + '</div></div>';
+    }).join('');
+  }
+
+  function routeHtml(w) {
+    // 진척률로 공정 진행 위치를 추정해서 표시한다
+    var pct = w.done / w.qty;
+    var at = w.status === '완료' || w.status === '마감' ? w.route.length
+           : w.status === '진행' ? Math.max(1, Math.ceil(pct * w.route.length)) : 0;
+    return '<div class="route">' + w.route.map(function (r, i) {
+      var cls = i < at - 1 ? 'dn' : i === at - 1 ? 'on' : '';
+      return (i ? '<span>▸</span>' : '') + '<i class="' + cls + '">' + r + '</i>';
+    }).join('') + '</div>';
+  }
+
+  function render() {
+    var list = filtered();
+    summary(list);
+    document.getElementById('cnt').textContent = list.length + '건';
+
+    document.getElementById('tb').innerHTML = list.map(function (w, i) {
+      var pct = Math.min(100, w.done / w.qty * 100);
+      var col = pct >= 100 ? 'var(--ok)' : pct > 0 ? 'var(--accent)' : '#394454';
+      var late = new Date(w.due) < new Date(Mock.today()) && w.status !== '완료' && w.status !== '마감';
+      return '<tr data-i="' + i + '" class="row">' +
+        '<td><input type="checkbox" class="ck"></td>' +
+        '<td class="lot">' + w.no + '</td>' +
+        '<td class="dim">' + w.erpOrder + '</td>' +
+        '<td>' + w.item + '</td>' +
+        '<td>' + w.itemName + '</td>' +
+        '<td>' + w.line + ' <span class="dim">' + w.lineName + '</span></td>' +
+        '<td class="num">' + w.qty.toLocaleString() + '</td>' +
+        '<td class="num">' + w.done.toLocaleString() + '</td>' +
+        '<td class="num"' + (w.bad ? ' style="color:var(--bad)"' : '') + '>' + (w.bad || '-') + '</td>' +
+        '<td><div class="mini-bar"><i style="width:' + pct.toFixed(0) + '%;background:' + col + '"></i></div></td>' +
+        '<td><span class="st ' + stCls[w.status] + '">' + w.status + '</span></td>' +
+        '<td' + (late ? ' style="color:var(--bad)"' : '') + '>' + w.due + (late ? ' ⚠' : '') + '</td>' +
+        '<td>' + w.worker + '</td>' +
+        '</tr>' +
+        '<tr class="detail" id="d' + i + '" style="display:none"><td colspan="13"><div class="inner">' +
+          '<div style="display:flex;gap:40px;flex-wrap:wrap">' +
+            '<div><div class="dim" style="font-size:11px;margin-bottom:6px">공정 경로 (라우팅)</div>' + routeHtml(w) + '</div>' +
+            '<div><div class="dim" style="font-size:11px;margin-bottom:6px">생산 LOT</div><span class="lot">' + w.lot + '</span></div>' +
+            '<div><div class="dim" style="font-size:11px;margin-bottom:6px">단위</div>' + w.unit + '</div>' +
+            '<div><div class="dim" style="font-size:11px;margin-bottom:6px">잔량</div>' + (w.qty - w.done).toLocaleString() + ' ' + w.unit + '</div>' +
+          '</div>' +
+          '<div class="note">ERP 오더 ' + w.erpOrder + ' 수신분. 실적은 POP 현장단말에서 등록되며 마감 후 ERP로 역전송됩니다.</div>' +
+        '</div></td></tr>';
+    }).join('');
+
+    // 행 펼치기
+    Array.prototype.forEach.call(document.querySelectorAll('#tb tr.row'), function (tr) {
+      tr.style.cursor = 'pointer';
+      tr.addEventListener('click', function (e) {
+        if (e.target.type === 'checkbox') return;
+        var d = document.getElementById('d' + tr.dataset.i);
+        d.style.display = d.style.display === 'none' ? '' : 'none';
+      });
+    });
+  }
+
+  document.getElementById('btn-search').onclick = render;
+  document.getElementById('btn-reset').onclick = function () {
+    document.getElementById('f-line').value = '';
+    document.getElementById('f-status').value = '';
+    document.getElementById('f-item').value = '';
+    render();
+  };
+  document.getElementById('f-item').addEventListener('keyup', function (e) { if (e.key === 'Enter') render(); });
+
+  document.getElementById('ck-all').onclick = function () {
+    var v = this.checked;
+    Array.prototype.forEach.call(document.querySelectorAll('.ck'), function (c) { c.checked = v; });
+  };
+
+  document.getElementById('btn-recv').onclick = function () {
+    alert('ERP 생산오더 수신\n\n인터페이스 : GET /api/v1/erp/production-orders\n대상 기간 : ' + Mock.today() + ' ~ +7일\n\n(데모 화면이므로 실제 수신은 수행하지 않습니다)');
+  };
+  document.getElementById('btn-fix').onclick = function () {
+    var n = document.querySelectorAll('.ck:checked').length;
+    if (!n) { alert('확정할 작업지시를 선택하세요.'); return; }
+    alert(n + '건을 확정 처리합니다.\n상태가 [계획] → [확정] 으로 변경되며 현장 POP 단말에 노출됩니다.');
+  };
+
+  render();
+})();
+</script>
+</body>
+</html>

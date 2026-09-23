@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>작업배정 · 디스패칭 · SH-MES</title>
+<link rel="stylesheet" href="../assets/css/app.css">
+<style>
+  .gantt { font-size: 11px; }
+  .gantt .hdr, .gantt .row { display: grid; grid-template-columns: 150px 1fr 70px; align-items: center; }
+  .gantt .hdr { border-bottom: 1px solid var(--line); background: var(--panel-2); }
+  .gantt .hdr .ticks { position: relative; height: 26px; }
+  .gantt .hdr .ticks span {
+    position: absolute; top: 7px; transform: translateX(-50%);
+    color: var(--txt-dim); font-family: var(--mono); font-size: 10px;
+  }
+  .gantt .row { border-bottom: 1px solid #1f2732; height: 38px; }
+  .gantt .row:hover { background: #1b222c; }
+  .gantt .nm { padding: 0 12px; }
+  .gantt .nm b { font-size: 12px; }
+  .gantt .nm span { color: var(--txt-dim); font-size: 10px; margin-left: 4px; }
+  .gantt .track { position: relative; height: 100%; border-left: 1px solid var(--line); }
+  .gantt .track .grid-l { position: absolute; top: 0; bottom: 0; width: 1px; background: #1c242f; }
+  .gantt .blk {
+    position: absolute; top: 7px; height: 24px; border-radius: 2px;
+    display: flex; align-items: center; padding: 0 6px; overflow: hidden;
+    white-space: nowrap; cursor: pointer; font-size: 10px;
+  }
+  .gantt .blk.run { background: rgba(0,169,165,.22); border: 1px solid rgba(0,169,165,.55); color: #7fdedb; }
+  .gantt .blk.setup { background: rgba(224,168,58,.2); border: 1px solid rgba(224,168,58,.5); color: #eabf62; }
+  .gantt .blk:hover { filter: brightness(1.35); }
+  .gantt .load { text-align: right; padding-right: 12px; font-family: var(--mono); font-size: 11px; }
+  .gantt .now { position: absolute; top: 0; bottom: 0; width: 1px; background: #e5544b; z-index: 3; }
+</style>
+</head>
+<body data-page="dispatch" data-title="작업배정 · 디스패칭" data-crumb="M-03 / 현장 운영">
+
+<div class="filters">
+  <label>기준일</label>
+  <input type="date" id="f-date">
+  <label>교대조</label>
+  <select><option>전체</option><option>A조(주간) 08:00~20:00</option><option>B조(야간) 20:00~08:00</option></select>
+  <label>배정 규칙</label>
+  <select id="f-rule">
+    <option>납기우선 (EDD)</option>
+    <option>선착순 (FIFO)</option>
+    <option>셋업최소화 (품목 그룹핑)</option>
+  </select>
+  <button class="btn pri" id="btn-run">자동 배정 실행</button>
+  <div style="flex:1"></div>
+  <div class="legend">
+    <span><i style="background:rgba(0,169,165,.6)"></i>작업</span>
+    <span><i style="background:rgba(224,168,58,.6)"></i>셋업(품목변경)</span>
+    <span><i style="background:#e5544b"></i>현재시각</span>
+  </div>
+</div>
+
+<div class="grid g4" style="margin-bottom:12px" id="sum"></div>
+
+<div class="card" style="margin-bottom:12px">
+  <header>
+    <h2>설비별 일정 (간트)</h2>
+    <span class="sub">08:00 ~ 20:00 · A조</span>
+    <div class="spacer"></div>
+    <span class="dim" style="font-size:11px">블록을 클릭하면 지시 상세가 표시됩니다</span>
+  </header>
+  <div class="body tight">
+    <div class="gantt">
+      <div class="hdr">
+        <div class="nm" style="color:var(--txt-dim)">설비</div>
+        <div class="ticks" id="ticks"></div>
+        <div class="load" style="color:var(--txt-dim)">부하율</div>
+      </div>
+      <div id="rows"></div>
+    </div>
+  </div>
+</div>
+
+<div class="grid g2">
+  <div class="card">
+    <header><h2>미배정 작업지시</h2><span class="sub">확정 완료 · 설비 미지정</span></header>
+    <div class="body tight">
+      <table class="tb">
+        <thead><tr><th>작업지시</th><th>품번</th><th class="num">수량</th><th>납기</th><th>권장 설비</th><th></th></tr></thead>
+        <tbody id="tb-un"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <header><h2>설비 부하 현황</h2><span class="sub">배정시간 / 가용시간(720분)</span></header>
+    <div class="body"><div id="ch-load"></div>
+      <div class="note">부하율 100% 초과 설비는 잔업 또는 타 라인 이관이 필요합니다. 셋업시간은 부하에서 제외하고 별도 집계합니다(6대 로스 '작업준비·조정').</div>
+    </div>
+  </div>
+</div>
+
+<script src="../assets/js/auth.js"></script>
+<script src="../assets/js/mock.js"></script>
+<script src="../assets/js/chart.js"></script>
+<script src="../assets/js/shell.js"></script>
+<script>
+(function () {
+  document.getElementById('f-date').value = Mock.today();
+
+  var rows = Mock.schedule();
+  var START = 8 * 60, END = 20 * 60, SPAN = END - START;
+
+  // 시간 눈금
+  var ticks = document.getElementById('ticks');
+  var th = '';
+  for (var t = START; t <= END; t += 60) {
+    var p = (t - START) / SPAN * 100;
+    th += '<span style="left:' + p + '%">' + String(t / 60).padStart(2, '0') + '</span>';
+  }
+  ticks.innerHTML = th;
+
+  // 현재 시각 라인 (근무시간 밖이면 숨김)
+  var now = new Date();
+  var nowMin = now.getHours() * 60 + now.getMinutes();
+  var nowPct = (nowMin - START) / SPAN * 100;
+
+  function trackGrid() {
+    var g = '';
+    for (var t = START + 60; t < END; t += 60) {
+      g += '<div class="grid-l" style="left:' + ((t - START) / SPAN * 100) + '%"></div>';
+    }
+    if (nowPct > 0 && nowPct < 100) g += '<div class="now" style="left:' + nowPct + '%"></div>';
+    return g;
+  }
+
+  document.getElementById('rows').innerHTML = rows.map(function (r) {
+    var blocks = r.blocks.map(function (b) {
+      var l = (b.start - START) / SPAN * 100;
+      var w = b.dur / SPAN * 100;
+      var label = b.kind === 'setup' ? '셋업' : b.item;
+      return '<div class="blk ' + b.kind + '" style="left:' + l + '%;width:' + w + '%" ' +
+        'title="' + b.wo + ' / ' + (b.item || '품목변경') + ' / ' + b.dur + '분" ' +
+        'data-info="' + b.wo + '|' + (b.item || '품목변경 셋업') + '|' + b.dur + '">' + label + '</div>';
+    }).join('');
+    var loadCol = r.load > 100 ? 'var(--bad)' : r.load > 88 ? 'var(--warn)' : 'var(--ok)';
+    return '<div class="row">' +
+      '<div class="nm"><b>' + r.line + '</b><span>' + r.name + '</span></div>' +
+      '<div class="track">' + trackGrid() + blocks + '</div>' +
+      '<div class="load" style="color:' + loadCol + '">' + r.load + '%</div>' +
+      '</div>';
+  }).join('');
+
+  Array.prototype.forEach.call(document.querySelectorAll('.blk'), function (b) {
+    b.onclick = function () {
+      var p = b.dataset.info.split('|');
+      alert('작업지시 : ' + p[0] + '\n품목 : ' + p[1] + '\n소요 : ' + p[2] + '분');
+    };
+  });
+
+  // 요약
+  var setupMin = rows.reduce(function (a, r) {
+    return a + r.blocks.filter(function (b) { return b.kind === 'setup'; }).reduce(function (x, b) { return x + b.dur; }, 0);
+  }, 0);
+  var runMin = rows.reduce(function (a, r) {
+    return a + r.blocks.filter(function (b) { return b.kind === 'run'; }).reduce(function (x, b) { return x + b.dur; }, 0);
+  }, 0);
+  var avg = rows.reduce(function (a, r) { return a + r.load; }, 0) / rows.length;
+  var over = rows.filter(function (r) { return r.load > 100; }).length;
+
+  document.getElementById('sum').innerHTML = [
+    { l: '평균 설비 부하율', v: avg.toFixed(0), u: '%', s: '가용 720분 기준', c: avg > 95 ? 'k-warn' : '' },
+    { l: '배정 작업시간', v: (runMin / 60).toFixed(1), u: 'h', s: rows.length + '개 설비 합계', c: '' },
+    { l: '셋업 손실시간', v: setupMin, u: '분', s: '전체의 ' + (setupMin / (runMin + setupMin) * 100).toFixed(1) + '%', c: 'k-warn' },
+    { l: '과부하 설비', v: over, u: '대', s: over ? '잔업 또는 이관 검토' : '여유 있음', c: over ? 'k-bad' : 'k-ok' }
+  ].map(function (k) {
+    return '<div class="kpi ' + k.c + '"><div class="bar"></div><div class="lbl">' + k.l + '</div>' +
+      '<div class="val">' + k.v + '<small>' + k.u + '</small></div><div class="dlt dim">' + k.s + '</div></div>';
+  }).join('');
+
+  // 미배정 지시
+  var un = Mock.workOrders().filter(function (w) { return w.status === '확정'; }).slice(0, 6);
+  document.getElementById('tb-un').innerHTML = un.map(function (w) {
+    return '<tr><td class="lot">' + w.no + '</td><td>' + w.item + '</td>' +
+      '<td class="num">' + w.qty.toLocaleString() + '</td><td>' + w.due + '</td>' +
+      '<td>' + w.line + '</td>' +
+      '<td><button class="btn sm" onclick="alert(\'' + w.no + ' 를 ' + w.line + ' 에 배정합니다.\')">배정</button></td></tr>';
+  }).join('');
+
+  // 부하 막대
+  Chart.bars(document.getElementById('ch-load'), {
+    labels: rows.map(function (r) { return r.line; }),
+    data: rows.map(function (r) { return r.load; }),
+    colors: rows.map(function (r) { return r.load > 100 ? '#e5544b' : r.load > 88 ? '#e0a83a' : '#00a9a5'; }),
+    max: 120, h: 180, showValue: true
+  });
+
+  document.getElementById('btn-run').onclick = function () {
+    var rule = document.getElementById('f-rule').value;
+    alert('자동 배정 실행\n\n규칙 : ' + rule +
+      '\n대상 : 미배정 ' + un.length + '건' +
+      '\n제약 : 설비 가용시간, 품목-설비 적합성, 셋업시간' +
+      '\n\n1차 오픈은 룰 기반으로 동작합니다. 최적화 솔버 적용은 2차 과제입니다.');
+  };
+})();
+</script>
+</body>
+</html>
