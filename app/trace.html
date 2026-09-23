@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>LOT 추적 · 계보 · SH-MES</title>
+<link rel="stylesheet" href="../assets/css/app.css">
+<style>
+  .tree { font-size: 12px; padding: 4px 0; }
+  .tree ul { list-style: none; margin: 0; padding-left: 26px; position: relative; }
+  .tree > ul { padding-left: 4px; }
+  .tree ul ul::before {
+    content: ""; position: absolute; left: 10px; top: 0; bottom: 14px;
+    width: 1px; background: var(--line);
+  }
+  .tree li { position: relative; padding: 4px 0; }
+  .tree ul ul > li::before {
+    content: ""; position: absolute; left: -16px; top: 18px;
+    width: 14px; height: 1px; background: var(--line);
+  }
+  .node {
+    display: inline-flex; align-items: center; gap: 10px;
+    border: 1px solid var(--line); background: var(--panel-2);
+    border-radius: 3px; padding: 6px 11px;
+  }
+  .node:hover { border-color: var(--accent-dim); }
+  .node .nm { font-family: var(--mono); font-size: 11.5px; color: #9fd6d4; }
+  .node .pr { font-size: 10.5px; color: var(--txt-dim); }
+  .node .qt { font-size: 11px; }
+  .node.ng { border-color: rgba(229,84,75,.5); background: rgba(229,84,75,.08); }
+  .node.ng .nm { color: #f2938c; }
+  .node.raw { background: #141a23; }
+  .node.raw .nm { color: #b6c1d0; }
+  .node .tag {
+    font-size: 9.5px; padding: 1px 6px; border-radius: 2px;
+    background: #2a3442; color: #93a1b3;
+  }
+  .node.ng .tag { background: rgba(229,84,75,.25); color: #f2938c; }
+  .dirbtn { display: flex; gap: 0; }
+  .dirbtn button {
+    border: 1px solid var(--line); background: var(--panel-2); color: var(--txt-dim);
+    padding: 6px 14px; font-size: 12px; cursor: pointer; font-family: inherit;
+  }
+  .dirbtn button:first-child { border-radius: 3px 0 0 3px; }
+  .dirbtn button:last-child { border-radius: 0 3px 3px 0; border-left: none; }
+  .dirbtn button.on { background: var(--accent-dim); color: #eafffe; border-color: var(--accent); }
+</style>
+</head>
+<body data-page="trace" data-title="LOT 추적 · 계보" data-crumb="M-08 / 추적 · 분석">
+
+<div class="filters">
+  <label>LOT 번호</label>
+  <input type="text" id="f-lot" value="HS1-PK01-260923-041" style="width:210px;font-family:var(--mono)">
+  <button class="btn pri" id="btn-go">추적</button>
+  <label style="margin-left:10px">방향</label>
+  <div class="dirbtn">
+    <button id="d-back" class="on">역방향 (완제품 → 원료)</button>
+    <button id="d-fwd">정방향 (원료 → 출하)</button>
+  </div>
+  <div style="flex:1"></div>
+  <button class="btn danger" id="btn-recall">리콜 영향범위 산출</button>
+  <button class="btn" id="btn-exp">추적보고서 출력</button>
+</div>
+
+<div class="grid g4" style="margin-bottom:12px" id="sum"></div>
+
+<div class="grid" style="grid-template-columns:1fr 360px">
+  <div class="card">
+    <header>
+      <h2>LOT 계보 트리</h2><span class="sub" id="tree-sub"></span>
+      <div class="spacer"></div>
+      <div class="legend">
+        <span><i style="background:#2a3442"></i>정상</span>
+        <span><i style="background:rgba(229,84,75,.6)"></i>품질 이상 이력</span>
+      </div>
+    </header>
+    <div class="body">
+      <div class="tree" id="tree"></div>
+      <div class="note">각 노드는 공정 · 설비 · 작업자 · 일시를 포함합니다. 노드를 클릭하면 해당 공정의 실적과 검사기록으로 이동합니다.</div>
+    </div>
+  </div>
+
+  <div>
+    <div class="card" style="margin-bottom:12px">
+      <header><h2>LOT 기본 정보</h2></header>
+      <div class="body tight"><table class="tb" id="tb-info"></table></div>
+    </div>
+
+    <div class="card" style="margin-bottom:12px">
+      <header><h2>출하 이력</h2><span class="sub">정방향</span></header>
+      <div class="body tight">
+        <table class="tb">
+          <thead><tr><th>거래처</th><th>출하번호</th><th class="num">수량</th><th>일자</th></tr></thead>
+          <tbody id="tb-ship"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card">
+      <header><h2>연관 품질 기록</h2></header>
+      <div class="body tight">
+        <table class="tb"><tbody id="tb-q"></tbody></table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="../assets/js/auth.js"></script>
+<script src="../assets/js/mock.js"></script>
+<script src="../assets/js/chart.js"></script>
+<script src="../assets/js/shell.js"></script>
+<script>
+(function () {
+  var g = Mock.genealogy();
+
+  function nodeHtml(n) {
+    var raw = n.proc === '입고자재';
+    return '<span class="node ' + (n.ng ? 'ng' : '') + (raw ? ' raw' : '') + '" ' +
+      'onclick="alert(\'' + n.name + '\\n공정 : ' + n.proc + '\\n설비 : ' + n.eq +
+      '\\n담당 : ' + n.worker + '\\n일시 : ' + n.at + '\\n수량 : ' + n.qty + '\')">' +
+      '<span class="tag">' + n.proc + '</span>' +
+      '<span class="nm">' + n.name + '</span>' +
+      '<span class="pr">' + (raw ? n.worker : n.eq + ' · ' + n.worker) + '</span>' +
+      '<span class="qt">' + n.qty + '</span>' +
+      '<span class="pr">' + n.at + '</span>' +
+      (n.ng ? '<span class="tag">품질이상</span>' : '') +
+      '</span>';
+  }
+
+  function build(n) {
+    var h = '<li>' + nodeHtml(n);
+    if (n.children && n.children.length) {
+      h += '<ul>' + n.children.map(build).join('') + '</ul>';
+    }
+    return h + '</li>';
+  }
+
+  function render(dir) {
+    document.getElementById('tree-sub').textContent =
+      dir === 'back' ? '역방향 — 완제품에서 투입 원료까지' : '정방향 — 원료에서 출하처까지';
+    document.getElementById('tree').innerHTML = '<ul>' + build(g.tree) + '</ul>';
+  }
+  render('back');
+
+  document.getElementById('d-back').onclick = function () {
+    this.classList.add('on'); document.getElementById('d-fwd').classList.remove('on'); render('back');
+  };
+  document.getElementById('d-fwd').onclick = function () {
+    this.classList.add('on'); document.getElementById('d-back').classList.remove('on'); render('fwd');
+  };
+
+  // 요약
+  function countNodes(n) {
+    return 1 + (n.children || []).reduce(function (a, c) { return a + countNodes(c); }, 0);
+  }
+  function countNg(n) {
+    return (n.ng ? 1 : 0) + (n.children || []).reduce(function (a, c) { return a + countNg(c); }, 0);
+  }
+  function depth(n) {
+    return 1 + Math.max(0, ...(n.children || []).map(depth));
+  }
+  var ng = countNg(g.tree);
+  document.getElementById('sum').innerHTML = [
+    { l: '추적 노드 수', v: countNodes(g.tree), u: '개', s: '공정 ' + (countNodes(g.tree) - 4) + ' · 원자재 4', c: '' },
+    { l: '추적 단계', v: depth(g.tree), u: '단계', s: '포장 → 검사 → 코팅 → 배합 → 원료', c: '' },
+    { l: '품질이상 노드', v: ng, u: '건', s: ng ? 'CT-01 두께 관리이탈' : '없음', c: ng ? 'k-bad' : 'k-ok' },
+    { l: '출하 수량', v: g.shipTo.reduce(function (a, s) { return a + s.qty; }, 0).toLocaleString(), u: 'EA',
+      s: g.shipTo.length + '개 거래처', c: '' }
+  ].map(function (k) {
+    return '<div class="kpi ' + k.c + '"><div class="bar"></div><div class="lbl">' + k.l + '</div>' +
+      '<div class="val">' + k.v + '<small>' + k.u + '</small></div><div class="dlt dim">' + k.s + '</div></div>';
+  }).join('');
+
+  // 기본정보
+  document.getElementById('tb-info').innerHTML =
+    [['LOT 번호', '<span class="lot">' + g.lot + '</span>'],
+     ['품번 / 품명', g.item + '<br><span class="dim">' + g.itemName + '</span>'],
+     ['생산수량', g.qty.toLocaleString() + ' ' + g.unit],
+     ['생산일시', g.made],
+     ['작업지시', '<span class="lot">WO-260923-001</span>'],
+     ['현재 상태', '<span class="st st-done">출하 완료</span>']
+    ].map(function (r) {
+      return '<tr><td class="dim" style="width:76px">' + r[0] + '</td><td>' + r[1] + '</td></tr>';
+    }).join('');
+
+  document.getElementById('tb-ship').innerHTML = g.shipTo.map(function (s) {
+    return '<tr><td>' + s.cust + '</td><td class="lot">' + s.doc + '</td>' +
+      '<td class="num">' + s.qty.toLocaleString() + '</td><td>' + s.date + '</td></tr>';
+  }).join('') + '<tr><td class="dim">재고 보유</td><td class="dim">-</td><td class="num dim">300</td><td class="dim">-</td></tr>';
+
+  var QREC = [
+    { t: '공정검사', d: 'CT-01 두께 25점 측정 · 부적합 2', s: '조건부' },
+    { t: 'NCR', d: 'NCR-260923-01 두께 관리상한 이탈', s: '진행' },
+    { t: '출하검사', d: 'HS1-PK01-260923-041 20점 측정', s: '합격' },
+    { t: '수입검사', d: 'BD-2200 L26-0817 · 5점', s: '합격' }
+  ];
+  document.getElementById('tb-q').innerHTML = QREC.map(function (q) {
+    var c = q.s === '합격' ? 'st-run' : q.s === '조건부' ? 'st-set' : 'st-stop';
+    return '<tr><td style="width:66px" class="dim">' + q.t + '</td>' +
+      '<td style="white-space:normal">' + q.d + '</td>' +
+      '<td style="width:58px"><span class="st ' + c + '">' + q.s + '</span></td></tr>';
+  }).join('');
+
+  document.getElementById('btn-go').onclick = function () {
+    var v = document.getElementById('f-lot').value.trim();
+    if (!v) { alert('LOT 번호를 입력하세요.'); return; }
+    alert('LOT ' + v + ' 추적을 조회합니다.\n\n데모 화면에서는 샘플 LOT 계보만 표시됩니다.');
+  };
+
+  document.getElementById('btn-recall').onclick = function () {
+    alert('리콜 영향범위 산출\n\n기준 : 원자재 BD-2200 / L26-0817\n\n영향 배치 : BT-260923-002, BT-260923-004 (2건)\n영향 완제품 LOT : 6건 / 총 14,200 EA\n출하분 : 4개 거래처 / 11,900 EA\n재고분 : 2,300 EA\n\n대상 거래처에 통보 문서를 생성하시겠습니까?');
+  };
+  document.getElementById('btn-exp').onclick = function () {
+    alert('추적보고서 출력\n\n포함 : 계보 트리, 각 공정 실적, 투입자재 LOT 및 공급사,\n검사기록, 부적합 이력, 출하 이력\n\n고객사 품질감사 제출용 양식으로 생성됩니다.');
+  };
+})();
+</script>
+</body>
+</html>

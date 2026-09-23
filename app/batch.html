@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>배치 · 레시피 (ISA-88) · SH-MES</title>
+<link rel="stylesheet" href="../assets/css/app.css">
+<style>
+  .phase { display: flex; gap: 2px; margin: 10px 0 6px; }
+  .phase div {
+    flex: 1; text-align: center; font-size: 10px; padding: 5px 2px;
+    background: #1a222c; color: #6f7f92; border-top: 2px solid #2a3442;
+  }
+  .phase div.done { color: #6bd98c; border-top-color: #46c46b; background: rgba(70,196,107,.07); }
+  .phase div.on { color: #52cfcb; border-top-color: #00a9a5; background: rgba(0,169,165,.12); font-weight: 700; }
+  .bt { background: var(--panel); border: 1px solid var(--line); border-radius: 4px; padding: 12px 13px; }
+  .bt.run { border-color: rgba(0,169,165,.45); }
+  .bt .h { display: flex; align-items: center; gap: 8px; }
+  .bt .h b { font-family: var(--mono); font-size: 13px; }
+  .bt .pv { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-top: 8px; }
+  .bt .pv div { background: #0f151d; border: 1px solid var(--line); border-radius: 3px; padding: 6px 8px; text-align: center; }
+  .bt .pv .l { font-size: 9.5px; color: var(--txt-dim); }
+  .bt .pv .v { font-size: 15px; font-family: var(--mono); }
+</style>
+</head>
+<body data-page="batch" data-title="배치 · 레시피 (ISA-88)" data-crumb="M-07 / 설비 · 품질">
+
+<div class="filters">
+  <label>구분</label>
+  <select><option>진행 중</option><option>금일 전체</option><option>기간 조회</option></select>
+  <label>설비</label>
+  <select><option>전체</option><option>MIX-01 배합 1호기</option><option>MIX-02 배합 2호기</option></select>
+  <button class="btn pri">조회</button>
+  <div style="flex:1"></div>
+  <button class="btn" id="btn-new">컨트롤 레시피 생성</button>
+  <button class="btn" id="btn-ebr">전자배치기록(EBR) 출력</button>
+</div>
+
+<div class="grid g4" style="margin-bottom:12px" id="bts"></div>
+
+<div class="grid" style="grid-template-columns:1fr 400px;margin-bottom:12px">
+  <div class="card">
+    <header>
+      <h2>배치 트렌드</h2><span class="sub" id="tr-sub">BT-260923-004 · MIX-02</span>
+      <div class="spacer"></div>
+      <div class="legend">
+        <span><i style="background:#00a9a5"></i>실제 온도</span>
+        <span><i style="background:#e0a83a"></i>설정값</span>
+        <span><i style="background:#3d8bfd"></i>교반 RPM</span>
+      </div>
+    </header>
+    <div class="body">
+      <div id="ch-t"></div>
+      <div style="margin-top:10px"><div id="ch-rpm"></div></div>
+      <div class="note">설정값 대비 편차가 ±2℃를 초과하면 공정 알람이 발생하고, 해당 배치는 품질 검토 대상으로 자동 등록됩니다.</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <header><h2>전자배치기록 (EBR)</h2><span class="sub">감사추적 · ISA-88.00.04</span></header>
+    <div class="body tight" style="max-height:392px;overflow-y:auto">
+      <table class="tb"><tbody id="tb-ebr"></tbody></table>
+    </div>
+  </div>
+</div>
+
+<div class="grid" style="grid-template-columns:330px 1fr">
+  <div class="card">
+    <header><h2>마스터 레시피</h2><span class="sub">ISA-88 Part 3</span></header>
+    <div class="body tight">
+      <table class="tb">
+        <thead><tr><th>레시피 코드</th><th>품번</th><th>상태</th></tr></thead>
+        <tbody id="tb-rc"></tbody>
+      </table>
+      <div class="note" style="margin:10px 13px">폐기 상태 레시피는 신규 배치에 사용할 수 없습니다. 개정 시 이전 버전은 자동 폐기 처리됩니다.</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <header><h2>레시피 상세</h2><span class="sub" id="rc-sub"></span></header>
+    <div class="body">
+      <div class="grid g2">
+        <div>
+          <div class="dim" style="font-size:11px;margin-bottom:6px">포뮬러 (배합비)</div>
+          <table class="tb">
+            <thead><tr><th>자재</th><th>자재명</th><th class="num">투입량</th><th>허용차</th></tr></thead>
+            <tbody id="tb-fm"></tbody>
+          </table>
+        </div>
+        <div>
+          <div class="dim" style="font-size:11px;margin-bottom:6px">절차 (페이즈)</div>
+          <table class="tb">
+            <thead><tr><th>페이즈</th><th>설정값</th><th class="num">소요(분)</th></tr></thead>
+            <tbody id="tb-st"></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="note" id="rc-note"></div>
+    </div>
+  </div>
+</div>
+
+<script src="../assets/js/auth.js"></script>
+<script src="../assets/js/mock.js"></script>
+<script src="../assets/js/chart.js"></script>
+<script src="../assets/js/shell.js"></script>
+<script>
+(function () {
+  var bts = Mock.batches();
+  var rcs = Mock.recipes();
+  var PH = Mock.PHASES;
+
+  // ---- 배치 카드 ----
+  document.getElementById('bts').innerHTML = bts.map(function (b) {
+    var ph = PH.map(function (p, i) {
+      var cls = i < b.phaseIdx ? 'done' : i === b.phaseIdx ? 'on' : '';
+      return '<div class="' + cls + '">' + p + '</div>';
+    }).join('');
+    return '<div class="bt ' + (b.status === '진행' ? 'run' : '') + '">' +
+      '<div class="h"><b>' + b.no + '</b><span class="dim" style="font-size:10.5px">' + b.line + '</span>' +
+      '<span style="flex:1"></span><span class="st ' + (b.status === '진행' ? 'st-run' : 'st-done') + '">' + b.status + '</span></div>' +
+      '<div class="dim" style="font-size:11px;margin-top:4px">' + b.item + ' · ' + b.recipe + ' · ' +
+        b.qty.toLocaleString() + ' ' + b.unit + '</div>' +
+      '<div class="phase">' + ph + '</div>' +
+      '<div class="pv">' +
+        '<div><div class="l">온도 ℃</div><div class="v">' + b.temp.toFixed(1) + '</div></div>' +
+        '<div><div class="l">압력 bar</div><div class="v">' + b.press.toFixed(2) + '</div></div>' +
+        '<div><div class="l">교반 rpm</div><div class="v">' + b.rpm + '</div></div>' +
+      '</div>' +
+      '<div class="dim" style="font-size:10.5px;margin-top:7px">개시 ' + b.start + ' · 작업자 ' + b.operator + '</div>' +
+      '</div>';
+  }).join('');
+
+  // ---- 트렌드 ----
+  var tr = Mock.batchTrend();
+  Chart.line(document.getElementById('ch-t'), {
+    labels: tr.labels, h: 180, min: 15, max: 80,
+    series: [
+      { name: '설정', color: '#e0a83a', data: tr.setT, width: 1.2 },
+      { name: '실제', color: '#00a9a5', data: tr.temp }
+    ]
+  });
+  Chart.line(document.getElementById('ch-rpm'), {
+    labels: tr.labels, h: 110, min: 0, max: 180,
+    series: [{ name: 'RPM', color: '#3d8bfd', data: tr.rpm }]
+  });
+
+  // ---- EBR 감사추적 ----
+  var EBR = [
+    { t: '09:12:04', u: '최민호', a: '배치 개시', d: 'BT-260923-004 / RC-EM220-v4 컨트롤 레시피 인스턴스화' },
+    { t: '09:12:41', u: 'SYSTEM', a: '설비 점유', d: 'MIX-02 배정 · 이전 배치 세정 확인 완료' },
+    { t: '09:18:22', u: '최민호', a: '원료 칭량', d: 'BD-2200 336.2kg (허용차 ±1.0% 내)' },
+    { t: '09:24:10', u: '최민호', a: '원료 칭량', d: 'SV-0110 399.6kg (허용차 ±0.5% 내)' },
+    { t: '09:29:55', u: '최민호', a: '원료 칭량', d: 'CB-0450 48.5kg (허용차 ±2.0% 내)' },
+    { t: '09:33:18', u: '최민호', a: '전자서명', d: '칭량 완료 승인 — 인증 확인됨' },
+    { t: '09:35:02', u: 'SYSTEM', a: '페이즈 전환', d: '원료 칭량 → 투입' },
+    { t: '09:50:47', u: 'SYSTEM', a: '페이즈 전환', d: '투입 → 승온 (목표 60~65℃)' },
+    { t: '10:15:30', u: 'SYSTEM', a: '페이즈 전환', d: '승온 → 교반 (140 rpm)' },
+    { t: '10:41:12', u: 'SYSTEM', a: '공정 경보', d: '온도 63.9℃ — 설정 62℃ 대비 +1.9℃ (허용 범위 내)' },
+    { t: '11:02:33', u: '이지혜', a: '파라미터 변경', d: '교반속도 140 → 138 rpm (사유: 점도 상승 대응)' },
+    { t: '11:02:33', u: '이지혜', a: '전자서명', d: '파라미터 변경 승인 — 품질보증팀' }
+  ];
+  document.getElementById('tb-ebr').innerHTML = EBR.map(function (e) {
+    var col = e.a === '공정 경보' ? 'var(--warn)' : e.a === '전자서명' ? 'var(--info)' : 'var(--txt-dim)';
+    return '<tr><td class="num dim" style="width:58px">' + e.t + '</td>' +
+      '<td style="width:60px">' + e.u + '</td>' +
+      '<td style="width:78px;color:' + col + '">' + e.a + '</td>' +
+      '<td style="white-space:normal">' + e.d + '</td></tr>';
+  }).join('');
+
+  // ---- 레시피 ----
+  function showRecipe(rc) {
+    document.getElementById('rc-sub').textContent = rc.code + ' · ' + rc.name + ' · 배치사이즈 ' + rc.batchSize + rc.unit;
+    document.getElementById('tb-fm').innerHTML = rc.formula.length
+      ? rc.formula.map(function (f) {
+          return '<tr><td>' + f.mat + '</td><td>' + f.name + '</td>' +
+            '<td class="num">' + f.qty + ' ' + f.unit + '</td><td class="dim">' + f.tol + '</td></tr>';
+        }).join('')
+      : '<tr><td colspan="4" class="empty">폐기된 레시피입니다.</td></tr>';
+    document.getElementById('tb-st').innerHTML = rc.steps.length
+      ? rc.steps.map(function (s) {
+          return '<tr><td>' + s.ph + '</td><td class="dim">' + s.set + '</td><td class="num">' + s.time + '</td></tr>';
+        }).join('')
+      : '<tr><td colspan="3" class="empty">-</td></tr>';
+    var total = rc.steps.reduce(function (a, s) { return a + s.time; }, 0);
+    document.getElementById('rc-note').innerHTML = rc.steps.length
+      ? '총 소요시간 ' + total + '분 (' + (total / 60).toFixed(1) + '시간) · 승인 ' + rc.approved + ' / ' + rc.by +
+        '<br>마스터 레시피에서 컨트롤 레시피를 생성하면 배치번호가 채번되고, 실행 중 모든 조작이 EBR에 기록됩니다.'
+      : '이 레시피는 폐기되어 신규 배치에 사용할 수 없습니다.';
+  }
+
+  document.getElementById('tb-rc').innerHTML = rcs.map(function (r, i) {
+    return '<tr data-i="' + i + '" style="cursor:pointer"><td class="lot">' + r.code + '</td><td>' + r.item + '</td>' +
+      '<td><span class="st ' + (r.status === '승인' ? 'st-run' : 'st-stop') + '">' + r.status + '</span></td></tr>';
+  }).join('');
+  Array.prototype.forEach.call(document.querySelectorAll('#tb-rc tr'), function (tr) {
+    tr.onclick = function () { showRecipe(rcs[tr.dataset.i]); };
+  });
+  showRecipe(rcs[0]);
+
+  document.getElementById('btn-new').onclick = function () {
+    alert('컨트롤 레시피 생성\n\n마스터 레시피 : RC-EM220-v4\n배치번호 : BT-' + Mock.today().replace(/-/g, '').slice(2) + '-005 (자동 채번)\n설비 : MIX-02\n배치사이즈 : 800 kg\n\n생성 시 포뮬러·절차가 복사되며, 배치 고유 파라미터만 수정 가능합니다.');
+  };
+  document.getElementById('btn-ebr').onclick = function () {
+    alert('전자배치기록(EBR) 출력\n\n포함 항목 : 레시피 버전, 원료 LOT 및 칭량 실적, 페이즈별 실적값,\n파라미터 변경 이력, 전자서명, 공정 경보 이력\n\n출력물은 변경 불가 PDF로 생성되며 감사추적 기록이 첨부됩니다.');
+  };
+})();
+</script>
+</body>
+</html>
