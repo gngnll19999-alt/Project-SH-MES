@@ -9,7 +9,7 @@
 
   // 데모 계정. 실제 계정은 인사DB(SH-ERP.HR_EMP) 연동으로 대체된다.
   var ACCOUNTS = [
-    { id: 'test', pw: 'test', name: '김현우', dept: '생산관리팀', role: '생산관리자', roleCode: 'PROD_MGR', plant: 'HS1' },
+    { id: 'test', pw: 'test', name: '남성흠', dept: '생산관리팀', role: '생산관리자', roleCode: 'PROD_MGR', plant: 'HS1' },
     { id: 'op01', pw: 'op01', name: '박성진', dept: '코팅1반',   role: '작업자',     roleCode: 'OPERATOR', plant: 'HS1' },
     { id: 'qa01', pw: 'qa01', name: '이지혜', dept: '품질보증팀', role: '품질담당',   roleCode: 'QA',       plant: 'HS1' }
   ];
