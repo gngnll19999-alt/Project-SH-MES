@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SH-MES 제조실행시스템</title>
+<meta name="description" content="화성1공장 제조실행시스템(MES). MESA-11 기능모델과 ISA-88 배치표준 기반.">
+<link rel="stylesheet" href="assets/css/intro.css">
+</head>
+<body>
+
+<div class="nav">
+  <div class="wrap">
+    <a href="index.html" class="logo">
+      <span class="mk"></span>
+      <span><b>SH-MES</b> <span>제조실행시스템</span></span>
+    </a>
+    <div class="menu">
+      <a href="#scope">기능 범위</a>
+      <a href="#arch">아키텍처</a>
+      <a href="#screen">화면 구성</a>
+      <a href="#effect">도입 효과</a>
+    </div>
+    <a href="login.html" class="go">시스템 접속</a>
+  </div>
+</div>
+
+<div class="hero">
+  <div class="wrap">
+    <span class="tag">MESA-11 · ISA-95 Level 3 · ISA-88 Batch</span>
+    <h1>현장에서 벌어진 일이<br><em>기록으로 남는</em> 제조실행시스템</h1>
+    <p>
+      작업지시부터 실적, 설비 가동, 품질 검사, LOT 계보까지 한 흐름으로 잇습니다.
+      배합(화학)과 조립이 섞인 라인을 하나의 시스템으로 운영하기 위해
+      ISA-88 레시피 구조를 그대로 반영했습니다.
+    </p>
+    <div class="btns">
+      <a href="login.html" class="btn pri">시스템 접속</a>
+      <a href="#scope" class="btn">기능 범위 보기</a>
+    </div>
+    <div class="facts">
+      <div><b>9</b><span>주요 업무 화면</span></div>
+      <div><b>11/11</b><span>MESA-11 기능 대응</span></div>
+      <div><b>8</b><span>연계 라인 (배합·코팅·조립·검사·포장)</span></div>
+      <div><b>40</b><span>현장 POP 단말</span></div>
+    </div>
+  </div>
+</div>
+
+<section id="scope">
+  <div class="wrap">
+    <h2>기능 범위</h2>
+    <p class="lead">
+      MESA International의 11대 기능모델을 뼈대로 잡고, 국내 현장에서 실제로 쓰는 용어로 화면을 구성했습니다.
+      표준 용어를 그대로 번역해서 메뉴에 걸면 현장에서 아무도 누르지 않는다는 게 1차 구축 때의 교훈입니다.
+    </p>
+    <div class="cards">
+      <div class="c">
+        <div class="n">M-01 / M-02</div>
+        <h3>생산 모니터링 · 작업지시</h3>
+        <p>ERP 생산오더를 받아 작업지시로 확정하고, 라인별 진척과 계획 대비 실적을 실시간으로 표출합니다. 현장 대형 모니터 상시 표출용 자동 갱신을 지원합니다.</p>
+        <div class="std">MESA-11 ③ 작업단위 배정 / ⑪ 성과분석</div>
+      </div>
+      <div class="c">
+        <div class="n">M-03 / M-04</div>
+        <h3>작업배정 · POP 현장단말</h3>
+        <p>설비 단위 간트로 일정을 배정하고, 현장 단말에서 자재 확인 → 셋업 체크 → 작업 시작 → 실적 등록까지 한 화면에서 처리합니다. 오투입 시 다음 단계로 넘어가지 않습니다.</p>
+        <div class="std">MESA-11 ① 상세일정 / ⑤ 데이터수집 / ⑥ 인력관리</div>
+      </div>
+      <div class="c">
+        <div class="n">M-05</div>
+        <h3>설비관리 · OEE</h3>
+        <p>시간가동률 × 성능가동률 × 양품률로 OEE를 자동 산출합니다. 비가동 사유는 TPM 6대 로스 기준 12종으로 통합했고, MTBF·MTTR과 예방보전 일정을 함께 관리합니다.</p>
+        <div class="std">MESA-11 ② 자원상태 / ⑨ 설비보전</div>
+      </div>
+      <div class="c">
+        <div class="n">M-06</div>
+        <h3>품질관리 · SPC</h3>
+        <p>X-bar / R 관리도와 공정능력지수 Cp·Cpk를 산출하고, 관리이탈 룰(3σ 이탈, 연속 7점 편향)을 자동 판정합니다. 중결함 발생 시 다음 공정 진행을 차단합니다.</p>
+        <div class="std">MESA-11 ⑦ 품질관리 / IATF 16949 에러프루핑</div>
+      </div>
+      <div class="c">
+        <div class="n">M-07</div>
+        <h3>배치 · 레시피 (ISA-88)</h3>
+        <p>마스터 레시피에서 컨트롤 레시피를 인스턴스화해 배치를 실행합니다. 페이즈별 설정값과 실적값을 트렌드로 비교하고, 전자배치기록(EBR)으로 감사추적을 남깁니다.</p>
+        <div class="std">ISA-88 Part 3 레시피 / Part 4 EBR</div>
+      </div>
+      <div class="c">
+        <div class="n">M-08 / M-09</div>
+        <h3>LOT 추적 · 성과분석</h3>
+        <p>완제품에서 원료까지 역방향, 원료에서 출하처까지 정방향 계보를 트리로 조회합니다. 리콜 영향범위 산출까지 포함해 고객사 감사 대응 시간을 단축합니다.</p>
+        <div class="std">MESA-11 ⑩ 제품추적·계보 / ⑪ 성과분석</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="arch">
+  <div class="wrap">
+    <h2>시스템 아키텍처</h2>
+    <p class="lead">ISA-95(IEC 62264) 계층 모델을 기준으로 위치를 정의했습니다. SH-MES는 Level 3에 해당합니다.</p>
+    <div class="arch">
+      <div class="lv">
+        <div class="l">Level 4</div>
+        <div class="r"><b>SH-ERP — 전사적자원관리</b><span>수주 · 생산계획(MRP) · 구매 · 재고 · 원가 · 회계</span></div>
+      </div>
+      <div class="lv me">
+        <div class="l">Level 3</div>
+        <div class="r"><b>SH-MES — 제조실행시스템 (본 시스템)</b><span>작업지시 · 실적 · 품질 · 설비 · LOT 계보 · 배치 실행</span></div>
+      </div>
+      <div class="lv">
+        <div class="l">Level 2</div>
+        <div class="r"><b>SH-FMS — 통합 모니터링 / SCADA</b><span>실시간 공정 감시 · 알람 · 트렌드 · CCTV</span></div>
+      </div>
+      <div class="lv">
+        <div class="l">Level 1/0</div>
+        <div class="r"><b>PLC · 센서 · 설비</b><span>LS XGT / Mitsubishi MC Protocol / Modbus TCP → OPC UA 게이트웨이</span></div>
+      </div>
+    </div>
+
+    <div class="two" style="margin-top:34px">
+      <div>
+        <h3 style="font-size:15px;margin:0 0 10px">연계 인터페이스</h3>
+        <table class="spec">
+          <tr><th>구분</th><th>대상</th><th>내용</th></tr>
+          <tr><td>수신</td><td>SH-ERP</td><td>생산오더, 품목마스터, BOM, 거래처</td></tr>
+          <tr><td>송신</td><td>SH-ERP</td><td>생산실적, 자재투입실적, 불량실적</td></tr>
+          <tr><td>양방향</td><td>SH-FMS</td><td>설비 가동상태, 알람, 공정 태그값</td></tr>
+          <tr><td>수집</td><td>설비 PLC</td><td>OPC UA 구독 / 1초 주기</td></tr>
+        </table>
+      </div>
+      <div>
+        <h3 style="font-size:15px;margin:0 0 10px">기술 사양</h3>
+        <ul class="bullet">
+          <li><b>화면</b> HTML5 / CSS / Vanilla JS — 외부 CDN 의존 없음(폐쇄망)</li>
+          <li><b>차트</b> 자체 SVG 구현 (라인·막대·도넛·게이지·관리도)</li>
+          <li><b>대상 해상도</b> 현장 패널PC 1280×800 고정</li>
+          <li><b>인증</b> 역할기반 접근제어(RBAC), 실적 수정 시 변경이력 기록</li>
+          <li><b>API</b> REST + JSON, 필드명은 B2MML 어휘 준수</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="screen">
+  <div class="wrap">
+    <h2>화면 구성</h2>
+    <p class="lead">총 9개 업무 화면. 접속 후 좌측 메뉴에서 이동합니다.</p>
+    <table class="spec">
+      <tr><th style="width:80px">화면번호</th><th style="width:190px">화면명</th><th>주요 기능</th><th style="width:120px">경로</th></tr>
+      <tr><td>M-01</td><td>생산 모니터링</td><td>KPI 6종, 라인별 진척, 시간대별 추이, 불량 파레토, 실시간 이벤트</td><td><code>dashboard</code></td></tr>
+      <tr><td>M-02</td><td>작업지시 관리</td><td>ERP 오더 수신, 지시 확정, 공정경로, 진척률</td><td><code>workorder</code></td></tr>
+      <tr><td>M-03</td><td>작업배정·디스패칭</td><td>설비 단위 간트, 셋업 구분, 부하율, 미배정 지시</td><td><code>dispatch</code></td></tr>
+      <tr><td>M-04</td><td>POP 현장단말</td><td>자재 확인, 셋업 체크, 작업 시작/종료, 실적·불량 등록, 4M 변경점</td><td><code>pop</code></td></tr>
+      <tr><td>M-05</td><td>설비관리·OEE</td><td>OEE 게이지, 설비 상태보드, 6대 로스, 비가동 파레토, 예방보전</td><td><code>equipment</code></td></tr>
+      <tr><td>M-06</td><td>품질관리·SPC</td><td>X-bar/R 관리도, Cp·Cpk, 관리이탈 판정, 부적합 처리</td><td><code>quality</code></td></tr>
+      <tr><td>M-07</td><td>배치·레시피</td><td>마스터/컨트롤 레시피, 페이즈 실행, 배치 트렌드, EBR</td><td><code>batch</code></td></tr>
+      <tr><td>M-08</td><td>LOT 추적·계보</td><td>정/역방향 추적 트리, 투입자재 연결, 리콜 영향범위</td><td><code>trace</code></td></tr>
+      <tr><td>M-09</td><td>성과분석 리포트</td><td>기간별 추이, 라인·품목·작업조 비교, 엑셀 내보내기</td><td><code>analysis</code></td></tr>
+    </table>
+  </div>
+</section>
+
+<section id="effect">
+  <div class="wrap">
+    <h2>도입 효과 (목표)</h2>
+    <p class="lead">2026-10-31 오픈 기준, 3개월 안정화 후 측정 예정 지표입니다.</p>
+    <div class="two">
+      <div>
+        <ul class="bullet">
+          <li><b>LOT 추적 소요시간</b> 2~3일 → 10분 이내 (고객사 품질감사 대응)</li>
+          <li><b>OEE 집계</b> 월말 수기 → 실시간 자동 산출</li>
+          <li><b>실적 중복입력</b> 3개소 → 1개소 (POP 단말 단일 입력)</li>
+          <li><b>배합 지시</b> 엑셀 배합지시서 → 컨트롤 레시피 자동 생성</li>
+        </ul>
+      </div>
+      <div>
+        <ul class="bullet">
+          <li><b>불량 원인분석</b> 파레토·SPC 기반으로 주간 단위 개선회의 운영</li>
+          <li><b>오투입 방지</b> LOT 스캔 검증으로 자재 오투입 차단</li>
+          <li><b>문서 개정 관리</b> 구버전 작업표준서 열람 차단</li>
+          <li><b>스마트공장 수준</b> 기초 → 중간1 단계 진입 요건 충족</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <div>SH-MES v2.4 · 화성1공장 제조실행시스템 · 정보시스템팀</div>
+    <div>문서: SH-MES-WI-2026-001 / 최종 개정 2026-09-22</div>
+  </div>
+</footer>
+
+</body>
+</html>

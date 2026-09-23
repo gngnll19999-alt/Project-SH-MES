@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>로그인 · SH-MES</title>
+<link rel="stylesheet" href="assets/css/app.css">
+<style>
+  body { display: grid; place-items: center; background: #0b1015; }
+  .login {
+    width: 380px;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 5px;
+    padding: 34px 32px 28px;
+  }
+  .login .top { display: flex; align-items: center; gap: 10px; margin-bottom: 26px; }
+  .login .mk { width: 30px; height: 30px; border: 2px solid var(--accent); border-radius: 3px; position: relative; }
+  .login .mk::after { content: ""; position: absolute; left: 6px; top: 6px; width: 10px; height: 10px; background: var(--accent); }
+  .login .top b { font-size: 18px; letter-spacing: .5px; display: block; }
+  .login .top span { font-size: 11px; color: var(--txt-dim); }
+  .login label { display: block; font-size: 11.5px; color: var(--txt-dim); margin: 0 0 5px; }
+  .login input { width: 100%; padding: 9px 11px; font-size: 13px; margin-bottom: 14px; }
+  .login button {
+    width: 100%; padding: 10px; background: var(--accent-dim); border: 1px solid var(--accent);
+    color: #eafffe; border-radius: 3px; font-size: 14px; font-weight: 700; cursor: pointer;
+    font-family: inherit; margin-top: 4px;
+  }
+  .login button:hover { background: var(--accent); color: #04211f; }
+  .err {
+    color: #f0786f; font-size: 12px; min-height: 18px; margin: -6px 0 6px;
+  }
+  .demo {
+    margin-top: 22px; padding-top: 16px; border-top: 1px solid var(--line);
+    font-size: 11.5px; color: var(--txt-dim); line-height: 1.85;
+  }
+  .demo b { color: var(--txt); }
+  .demo code {
+    font-family: var(--mono); color: #9fd6d4; background: #0d1218;
+    padding: 1px 5px; border-radius: 2px;
+  }
+  .back { display: block; text-align: center; margin-top: 18px; font-size: 12px; color: var(--txt-dim); }
+  .back:hover { color: var(--txt); }
+  .cap { text-align: center; font-size: 11px; color: #4d5a6e; margin-top: 22px; }
+</style>
+</head>
+<body>
+
+<form class="login" id="f" autocomplete="off">
+  <div class="top">
+    <span class="mk"></span>
+    <span><b>SH-MES</b><span>제조실행시스템 v2.4 · 화성1공장</span></span>
+  </div>
+
+  <label for="uid">사번 / 아이디</label>
+  <input type="text" id="uid" value="" placeholder="사번을 입력하세요" autofocus>
+
+  <label for="upw">비밀번호</label>
+  <input type="password" id="upw" value="" placeholder="비밀번호">
+
+  <div class="err" id="err"></div>
+  <button type="submit">로그인</button>
+
+  <div class="demo">
+    <b>데모 계정</b><br>
+    생산관리자 <code>test</code> / <code>test</code><br>
+    현장작업자 <code>op01</code> / <code>op01</code><br>
+    품질담당 &nbsp;<code>qa01</code> / <code>qa01</code>
+  </div>
+
+  <a class="back" href="index.html">← 시스템 소개로 돌아가기</a>
+  <div class="cap">사내 전용 시스템입니다. 계정 공유를 금지합니다.</div>
+</form>
+
+<script src="assets/js/auth.js"></script>
+<script>
+document.getElementById('f').addEventListener('submit', function (e) {
+  e.preventDefault();
+  var id = document.getElementById('uid').value;
+  var pw = document.getElementById('upw').value;
+  var err = document.getElementById('err');
+
+  if (!id || !pw) { err.textContent = '사번과 비밀번호를 모두 입력하세요.'; return; }
+
+  var s = Auth.login(id, pw);
+  if (!s) {
+    err.textContent = '사번 또는 비밀번호가 올바르지 않습니다.';
+    document.getElementById('upw').value = '';
+    document.getElementById('upw').focus();
+    return;
+  }
+
+  // 로그인 전에 접근하려던 화면이 있으면 그리로 보낸다
+  var q = new URLSearchParams(location.search).get('redirect');
+  var ok = /^[a-z]+\.html$/.test(q || '');
+  location.href = 'app/' + (ok ? q : 'dashboard.html');
+});
+</script>
+</body>
+</html>
