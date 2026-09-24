@@ -85,3 +85,18 @@ presentation/           발표자료
 
 - [SH-ERP](../sh-erp) — 전사적자원관리 (생산오더 송신, 실적 수신)
 - [SH-FMS](../sh-monitoring) — 통합 모니터링 (설비 상태·알람 공유)
+
+## 만든 사람
+
+| | |
+|---|---|
+| 이름 | **남성흠** |
+| 출생 | 1996년생 |
+| 경력 | 중소기업 데이터센터 **7년 8개월차** (2026년 9월 기준) |
+| GitHub | [gngnll19999-alt](https://github.com/gngnll19999-alt) |
+
+### 프로젝트SH 3부작
+
+- [Project-SH-MES](https://github.com/gngnll19999-alt/Project-SH-MES) — SH-MES 제조실행시스템 **(현재 저장소)**
+- [Project-SH-ERP](https://github.com/gngnll19999-alt/Project-SH-ERP) — SH-ERP 전사적자원관리
+- [Project-SH-FMS](https://github.com/gngnll19999-alt/Project-SH-FMS) — SH-FMS 자동화공장 통합 모니터링
